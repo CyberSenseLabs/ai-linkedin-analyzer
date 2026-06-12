@@ -11,3 +11,6 @@ venv/
 
 # OS
 .DS_Store
+
+# Live enrichment output (contains scraped third-party profile data)
+data/enrichment.json

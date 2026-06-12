@@ -1,0 +1,99 @@
+[
+ {
+  "publicIdentifier": "dmooresieray",
+  "linkedinUrl": "https://www.linkedin.com/in/dmooresieray",
+  "firstName": "Davida",
+  "lastName": "M.",
+  "headline": "Founder & CEO of SecureGov Solution | Cybersecurity & GRC Executive",
+  "connectionsCount": 1113,
+  "followerCount": 1129,
+  "photo": "https://media.licdn.com/...",
+  "premium": false,
+  "influencer": false,
+  "openToWork": false,
+  "about": "SecureGovSolution is a GRC consulting firm...",
+  "experience": [],
+  "education": [
+   {
+    "schoolName": "Gwynedd Mercy University"
+   },
+   {
+    "schoolName": "Western Governors University",
+    "degree": "Bachelor's Degree",
+    "fieldOfStudy": "Cybersecurity"
+   }
+  ],
+  "certifications": [],
+  "skills": [
+   {
+    "name": "Cybersecurity"
+   },
+   {
+    "name": "CMMC "
+   },
+   {
+    "name": "GRC"
+   }
+  ]
+ },
+ {
+  "publicIdentifier": "legrandj",
+  "linkedinUrl": "https://www.linkedin.com/in/legrandj",
+  "firstName": "Julien",
+  "lastName": "Legrand",
+  "headline": "Cybersecurity Professional | MBA, MSc",
+  "connectionsCount": 10516,
+  "followerCount": 10729,
+  "photo": "https://media.licdn.com/...",
+  "premium": true,
+  "influencer": false,
+  "openToWork": false,
+  "about": "Protecting critical infrastructure globally. CISSP, CISM, CISA, CRISC, CEH",
+  "experience": [],
+  "education": [
+   {
+    "schoolName": "HKU Business School",
+    "degree": "MBA"
+   }
+  ],
+  "certifications": [],
+  "skills": []
+ },
+ {
+  "publicIdentifier": "jovanpenjin",
+  "linkedinUrl": "https://www.linkedin.com/in/jovanpenjin",
+  "firstName": "Jovan",
+  "lastName": "P.",
+  "headline": "containers kubernetes open compute security",
+  "connectionsCount": 523,
+  "followerCount": 524,
+  "photo": null,
+  "premium": false,
+  "influencer": false,
+  "openToWork": false,
+  "about": null,
+  "experience": [],
+  "education": [],
+  "certifications": [
+   {
+    "title": "CKA: Certified Kubernetes Administrator"
+   },
+   {
+    "title": "Vault Associate"
+   },
+   {
+    "title": "Docker Certified Associate"
+   }
+  ],
+  "skills": [
+   {
+    "name": "Linux",
+    "endorsements": "21 endorsements"
+   },
+   {
+    "name": "Virtualization",
+    "endorsements": "30 endorsements"
+   }
+  ]
+ }
+]
