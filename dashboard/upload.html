@@ -44,7 +44,11 @@ a{color:var(--color-text-info);}
     <button id="resetBtn" style="display:none;"><i class="ti ti-refresh" style="vertical-align:-2px;margin-right:5px;"></i>Reset</button>
   </div>
 </div>
-<div id="uploadStatus" style="font-size:12px;color:var(--color-text-secondary);margin:6px 0 1rem;min-height:1em;"></div>
+<div id="uploadStatus" style="display:none;align-items:center;gap:8px;border-radius:var(--border-radius-md);padding:0.6rem 0.9rem;font-size:13px;margin:0.5rem 0 1rem;"></div>
+<style>
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--color-border-secondary);border-top-color:var(--color-text-info);border-radius:50%;animation:spin .7s linear infinite;}
+</style>
 
 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0.5rem 0 0.75rem;">
   <span style="font-size:13px;color:var(--color-text-secondary);margin-right:4px;">Filter sector:</span>
@@ -402,8 +406,22 @@ render(INITIAL_PEOPLE, INITIAL_FLAGGED, INITIAL_SCAN);
 // --- Upload wiring --------------------------------------------------------------------------
 
 const fileInput=document.getElementById('fileInput');
+const uploadBtn=document.getElementById('uploadBtn');
 const status=document.getElementById('uploadStatus');
 const resetBtn=document.getElementById('resetBtn');
+
+function setStatus(html, kind){
+  status.innerHTML=html;
+  status.style.display=html?'flex':'none';
+  const colors={
+    info:['var(--color-background-info)','var(--color-text-info)'],
+    success:['var(--color-background-info)','var(--color-text-info)'],
+    error:['rgba(163,45,45,0.12)','#A32D2D'],
+  };
+  const [bg,fg]=colors[kind]||colors.info;
+  status.style.background=bg;
+  status.style.color=fg;
+}
 
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
 
@@ -411,32 +429,39 @@ fileInput.onchange=async (e)=>{
   const file=e.target.files[0];
   e.target.value='';
   if(!file) return;
-  status.textContent='Reading '+file.name+'…';
+
+  uploadBtn.disabled=true;
+  setStatus('<span class="spinner"></span> Reading <strong>'+esc(file.name)+'</strong>…', 'info');
+
   try{
     const zip=await JSZip.loadAsync(file);
     const entry=Object.values(zip.files).find(f=>!f.dir && /connections\.csv$/i.test(f.name));
     if(!entry){
-      status.textContent='Could not find a Connections.csv inside this archive. Make sure you uploaded the LinkedIn data export .zip.';
+      setStatus('<i class="ti ti-alert-circle"></i> Could not find a Connections.csv inside this archive. Make sure you uploaded the LinkedIn data export .zip.', 'error');
       return;
     }
+    setStatus('<span class="spinner"></span> Found Connections.csv — analysing your network…', 'info');
     const text=await entry.async('string');
     const records=rowsToRecords(parseCSV(text));
     if(!records.length){
-      status.textContent='Connections.csv was found but contained no rows.';
+      setStatus('<i class="ti ti-alert-circle"></i> Connections.csv was found but contained no rows.', 'error');
       return;
     }
     const {people,flagged,scan}=buildFromRecords(records);
     render(people,flagged,scan);
-    status.textContent='Loaded '+scan.total+' connections ('+Object.keys(people).length+' companies, '+scan.flagged+' flagged) — processed locally in your browser.';
+    setStatus('<i class="ti ti-circle-check"></i> Loaded <strong>'+scan.total+'</strong> connections ('+Object.keys(people).length+' companies, '+scan.flagged+' flagged) — processed locally in your browser.', 'success');
     resetBtn.style.display='inline-block';
+    document.getElementById('net').scrollIntoView({behavior:'smooth',block:'center'});
   }catch(err){
-    status.textContent='Could not process that file: '+err.message;
+    setStatus('<i class="ti ti-alert-circle"></i> Could not process that file: '+esc(err.message), 'error');
+  }finally{
+    uploadBtn.disabled=false;
   }
 };
 
 resetBtn.onclick=()=>{
   render(INITIAL_PEOPLE, INITIAL_FLAGGED, INITIAL_SCAN);
-  status.textContent='';
+  setStatus('', 'info');
   resetBtn.style.display='none';
 };
 })();
