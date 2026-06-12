@@ -259,7 +259,8 @@ function buildFromRecords(records){
 const W=680,H=470;
 let sim=null;
 
-function esc(s){return (s||'').replace(/"/g,'&quot;');}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function safeHref(u){return /^https?:\/\//i.test(u||'')?esc(u):'#';}
 
 function drill(name,sector,PEOPLE){
   const ppl=(PEOPLE[name]||[]).slice();
@@ -268,13 +269,13 @@ function drill(name,sector,PEOPLE){
   const maxc=Math.max(1,...catArr.map(c=>c[1]));
   let bars=catArr.map(([c,n])=>'<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;"><span>'+c+'</span><span style="color:var(--color-text-secondary)">'+n+'</span></div><div style="height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:'+Math.round(n/maxc*100)+'%;background:'+(ROLECOL[c]||'#888')+';border-radius:3px;"></div></div></div>').join('');
   let rows=ppl.map(p=>{
-    const nameCell = p.u ? '<a href="'+esc(p.u)+'" target="_blank" rel="noopener" style="color:var(--color-text-info);text-decoration:none;">'+p.n+' <i class="ti ti-external-link" style="font-size:12px;"></i></a>' : p.n;
-    return '<tr style="border-top:0.5px solid var(--color-border-tertiary);"><td style="padding:6px 8px 6px 0;font-size:13px;white-space:nowrap;">'+nameCell+'</td><td style="padding:6px 8px;font-size:12px;color:var(--color-text-secondary);">'+p.t+'</td><td style="padding:6px 0;font-size:12px;color:var(--color-text-tertiary);text-align:right;">'+(p.y||'')+'</td></tr>';
+    const nameCell = p.u ? '<a href="'+safeHref(p.u)+'" target="_blank" rel="noopener" style="color:var(--color-text-info);text-decoration:none;">'+esc(p.n)+' <i class="ti ti-external-link" style="font-size:12px;"></i></a>' : esc(p.n);
+    return '<tr style="border-top:0.5px solid var(--color-border-tertiary);"><td style="padding:6px 8px 6px 0;font-size:13px;white-space:nowrap;">'+nameCell+'</td><td style="padding:6px 8px;font-size:12px;color:var(--color-text-secondary);">'+esc(p.t)+'</td><td style="padding:6px 0;font-size:12px;color:var(--color-text-tertiary);text-align:right;">'+(p.y||'')+'</td></tr>';
   }).join('');
   document.getElementById('drill').innerHTML=
    '<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;">'
    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
-   +'<div style="display:flex;align-items:center;gap:10px;"><span style="width:14px;height:14px;border-radius:50%;background:'+SECTORS[sector]+';"></span><span style="font-size:18px;font-weight:500;">'+name+'</span><span style="font-size:13px;color:var(--color-text-secondary);">'+ppl.length+' connections · '+sector+'</span></div>'
+   +'<div style="display:flex;align-items:center;gap:10px;"><span style="width:14px;height:14px;border-radius:50%;background:'+SECTORS[sector]+';"></span><span style="font-size:18px;font-weight:500;">'+esc(name)+'</span><span style="font-size:13px;color:var(--color-text-secondary);">'+ppl.length+' connections · '+esc(sector)+'</span></div>'
    +'<button id="drillClose" style="font-size:12px;padding:4px 10px;">Close</button></div>'
    +'<div style="margin-bottom:14px;">'+bars+'</div>'
    +'<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;">Names link to LinkedIn profiles</div>'
@@ -296,10 +297,10 @@ function renderScan(FLAGGED,SCAN){
   const rows=FLAGGED.map(f=>{
     const reasons=(f.ers&&f.ers.length?f.ers:f.rs)||[];
     const trust=(f.trust&&f.trust.length)?' · <span style="color:var(--color-text-info)">trust: '+f.trust.join(', ')+'</span>':'';
-    const nameCell=f.u?'<a href="'+esc(f.u)+'" target="_blank" rel="noopener" style="color:var(--color-text-info);text-decoration:none;">'+f.n+'</a>':(f.n||'(blank)');
+    const nameCell=f.u?'<a href="'+safeHref(f.u)+'" target="_blank" rel="noopener" style="color:var(--color-text-info);text-decoration:none;">'+esc(f.n)+'</a>':esc(f.n||'(blank)');
     return '<tr style="border-top:0.5px solid var(--color-border-tertiary);vertical-align:top;">'
       +'<td style="padding:7px 8px 7px 0;">'+badge(f.sc,f.esc)+'</td>'
-      +'<td style="padding:7px 8px 7px 0;font-size:13px;white-space:nowrap;">'+nameCell+'<div style="font-size:11px;color:var(--color-text-tertiary);">'+(f.t||'no title')+(f.co?' @ '+f.co:'')+'</div></td>'
+      +'<td style="padding:7px 8px 7px 0;font-size:13px;white-space:nowrap;">'+nameCell+'<div style="font-size:11px;color:var(--color-text-tertiary);">'+esc(f.t||'no title')+(f.co?' @ '+esc(f.co):'')+'</div></td>'
       +'<td style="padding:7px 0;font-size:12px;color:var(--color-text-secondary);">'+reasons.join('; ')+trust+'</td>'
       +'</tr>';
   }).join('');
@@ -366,7 +367,7 @@ function render(PEOPLE, FLAGGED, SCAN){
     .attr('dy',d=>d.me?4:-d.r-4).attr('font-size',d=>d.me?11:10).attr('font-weight',500)
     .attr('fill',d=>d.me?'var(--color-background-primary)':'var(--color-text-primary)').style('pointer-events','none');
 
-  node.on('mousemove',function(e,d){if(d.me)return;const r=svg.node().getBoundingClientRect();tip.style.opacity=1;tip.style.left=(e.clientX-r.left+12)+'px';tip.style.top=(e.clientY-r.top+12)+'px';tip.innerHTML='<strong>'+d.label+'</strong><br>'+d.count+' connections<br><span style="color:var(--color-text-secondary)">'+d.sector+'</span><br><span style="color:var(--color-text-tertiary)">click to drill in</span>';})
+  node.on('mousemove',function(e,d){if(d.me)return;const r=svg.node().getBoundingClientRect();tip.style.opacity=1;tip.style.left=(e.clientX-r.left+12)+'px';tip.style.top=(e.clientY-r.top+12)+'px';tip.innerHTML='<strong>'+esc(d.label)+'</strong><br>'+d.count+' connections<br><span style="color:var(--color-text-secondary)">'+esc(d.sector)+'</span><br><span style="color:var(--color-text-tertiary)">click to drill in</span>';})
   .on('mouseleave',()=>tip.style.opacity=0)
   .on('click',(e,d)=>{if(!d.me)drill(d.label,d.sector,PEOPLE);});
 

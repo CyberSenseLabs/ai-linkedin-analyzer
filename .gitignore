@@ -17,3 +17,4 @@ data/enrichment.json
 
 # Extracted per-company connection data (contains your real connections)
 data/company_people.json
+.vercel
