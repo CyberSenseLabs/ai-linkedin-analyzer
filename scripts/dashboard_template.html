@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI LinkedIn Analyzer — Network Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>
+:root{
+  --color-background-primary:#ffffff; --color-background-secondary:#f5f4ef; --color-background-info:#E6F1FB;
+  --color-text-primary:#1f1e1c; --color-text-secondary:#5f5e5a; --color-text-tertiary:#888780; --color-text-info:#185FA5;
+  --color-border-tertiary:rgba(0,0,0,0.12); --color-border-secondary:rgba(0,0,0,0.25);
+  --border-radius-md:8px; --border-radius-lg:12px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --color-background-primary:#1f1e1c; --color-background-secondary:#2c2c2a; --color-background-info:#0C447C;
+  --color-text-primary:#f1efe8; --color-text-secondary:#b4b2a9; --color-text-tertiary:#888780; --color-text-info:#85B7EB;
+  --color-border-tertiary:rgba(255,255,255,0.14); --color-border-secondary:rgba(255,255,255,0.28);
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--color-background-primary);
+  color:var(--color-text-primary);max-width:760px;margin:0 auto;padding:2rem 1.25rem;line-height:1.6;}
+h1{font-size:22px;font-weight:500;margin:0 0 0.25rem;}
+.sub{color:var(--color-text-secondary);font-size:14px;margin:0 0 1.5rem;}
+button{font-family:inherit;border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);
+  border-radius:var(--border-radius-md);padding:6px 12px;cursor:pointer;}
+button:hover{background:var(--color-background-secondary);}
+table{border-collapse:collapse;}
+a{color:var(--color-text-info);}
+</style>
+</head>
+<body>
+<h1>AI LinkedIn Analyzer</h1>
+<p class="sub">Interactive network map of your LinkedIn connections, clustered by company and coloured by sector. Click a company to drill into the individuals you're connected with there.</p>
+
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0.5rem 0 0.75rem;">
+  <span style="font-size:13px;color:var(--color-text-secondary);margin-right:4px;">Filter sector:</span>
+  <span id="filters"></span>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:8px;font-size:12px;color:var(--color-text-secondary);" id="legend"></div>
+
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--color-text-secondary);margin-bottom:10px;cursor:pointer;">
+  <input type="checkbox" id="invToggle" style="width:auto;"> Overlay pending-invitation flow
+</label>
+
+<div style="position:relative;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;background:var(--color-background-primary);">
+  <div style="position:absolute;top:10px;right:10px;z-index:5;display:flex;flex-direction:column;gap:6px;">
+    <button id="zin" aria-label="Zoom in" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--color-background-primary);"><i class="ti ti-plus"></i></button>
+    <button id="zout" aria-label="Zoom out" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--color-background-primary);"><i class="ti ti-minus"></i></button>
+    <button id="zreset" aria-label="Reset view" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--color-background-primary);"><i class="ti ti-focus-centered"></i></button>
+  </div>
+  <div id="tip" style="position:absolute;pointer-events:none;opacity:0;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:6px 10px;font-size:12px;z-index:6;transition:opacity .1s;max-width:210px;"></div>
+  <svg id="net" viewBox="0 0 680 470" width="100%" style="display:block;cursor:grab;"></svg>
+  <div style="position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--color-text-tertiary);">Click a company to drill into people · drag to rearrange</div>
+</div>
+
+<div id="drill" style="margin-top:1rem;"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+const PEOPLE = /*__PEOPLE__*/;
+const SECTOR_OF = {};
+const SECTORS={'Banking & finance':'#378ADD','Telco & infrastructure':'#1D9E75','Security & consulting':'#7F77DD','Cloud & tech':'#D85A30','Utilities':'#BA7517','Education':'#D4537E'};
+const SECDARK={'Banking & finance':'#0C447C','Telco & infrastructure':'#0F6E56','Security & consulting':'#3C3489','Cloud & tech':'#993C1D','Utilities':'#633806','Education':'#72243E'};
+const COMPANY_SECTOR={'ANZ':'Banking & finance','Commonwealth Bank':'Banking & finance','NAB':'Banking & finance','Telstra':'Telco & infrastructure','Optus':'Telco & infrastructure','nbn® Australia':'Telco & infrastructure','Australia Post':'Telco & infrastructure','Infotrust':'Security & consulting','Versent':'Security & consulting','Accenture':'Security & consulting','Self-employed':'Security & consulting','Hays':'Security & consulting','Logicalis AP':'Security & consulting','Rapid7':'Security & consulting','Vanta':'Security & consulting','Freelance':'Security & consulting','CyberCX':'Security & consulting','AWS':'Cloud & tech','Cisco':'Cloud & tech','Microsoft':'Cloud & tech','Google':'Cloud & tech','Yarra Valley Water':'Utilities','La Trobe University':'Education','RMIT University':'Education','Uni of Melbourne':'Education'};
+const ROLECOL={'Exec':'#7F77DD','Director/Head':'#534AB7','Security':'#1D9E75','Risk/Compliance':'#378ADD','Architecture':'#D85A30','Engineering':'#BA7517','Consulting':'#D4537E','Management':'#888780','Sales/BD':'#639922','Analyst':'#085041','Recruitment':'#993C1D','Other':'#B4B2A9'};
+
+const companies = Object.keys(PEOPLE).map(name=>[name, PEOPLE[name].length, COMPANY_SECTOR[name]||'Security & consulting'])
+  .sort((a,b)=>b[1]-a[1]);
+companies.forEach(([n,,s])=>SECTOR_OF[n]=s);
+
+const W=680,H=470;
+let activeSectors=new Set(Object.keys(SECTORS));
+
+const lg=document.getElementById('legend');
+Object.entries(SECTORS).forEach(([k,c])=>{const s=document.createElement('span');s.style.cssText='display:flex;align-items:center;gap:5px;';s.innerHTML='<span style="width:11px;height:11px;border-radius:50%;background:'+c+';display:inline-block;"></span>'+k;lg.appendChild(s);});
+
+const ff=document.getElementById('filters');
+Object.keys(SECTORS).forEach(sec=>{
+  const b=document.createElement('button');
+  b.textContent=sec;
+  b.style.cssText='font-size:12px;padding:3px 10px;margin:2px;border-radius:14px;border:0.5px solid '+SECTORS[sec]+';background:'+SECTORS[sec]+';color:#fff;cursor:pointer;';
+  b.onclick=()=>{
+    if(activeSectors.has(sec)){activeSectors.delete(sec);b.style.background='transparent';b.style.color=SECDARK[sec];}
+    else{activeSectors.add(sec);b.style.background=SECTORS[sec];b.style.color='#fff';}
+    applyFilter();
+  };
+  ff.appendChild(b);
+});
+
+const nodes=[{id:'__me',label:'You',me:true,r:26}];
+const links=[];
+companies.forEach(([name,n,sec])=>{nodes.push({id:name,label:name,count:n,sector:sec,color:SECTORS[sec],r:6+Math.sqrt(n)*2.4});links.push({source:'__me',target:name,w:n});});
+
+const svg=d3.select('#net');
+const g=svg.append('g');
+const link=g.append('g').selectAll('line').data(links).join('line')
+  .attr('stroke-opacity',0.5).attr('stroke','var(--color-border-secondary)').attr('stroke-width',d=>0.5+Math.sqrt(d.w)/3);
+const node=g.append('g').selectAll('g').data(nodes).join('g').style('cursor','pointer');
+node.append('circle').attr('r',d=>d.r).attr('fill',d=>d.me?'var(--color-text-primary)':d.color)
+  .attr('stroke',d=>d.me?'var(--color-text-primary)':'#fff').attr('stroke-width',d=>d.me?0:1.2);
+node.append('text').text(d=>d.me?'YOU':(d.count>=12?d.label:'')).attr('text-anchor','middle')
+  .attr('dy',d=>d.me?4:-d.r-4).attr('font-size',d=>d.me?11:10).attr('font-weight',500)
+  .attr('fill',d=>d.me?'var(--color-background-primary)':'var(--color-text-primary)').style('pointer-events','none');
+
+const tip=document.getElementById('tip');
+node.on('mousemove',function(e,d){if(d.me)return;const r=svg.node().getBoundingClientRect();tip.style.opacity=1;tip.style.left=(e.clientX-r.left+12)+'px';tip.style.top=(e.clientY-r.top+12)+'px';tip.innerHTML='<strong>'+d.label+'</strong><br>'+d.count+' connections<br><span style="color:var(--color-text-secondary)">'+d.sector+'</span><br><span style="color:var(--color-text-tertiary)">click to drill in</span>';})
+.on('mouseleave',()=>tip.style.opacity=0)
+.on('click',(e,d)=>{if(!d.me)drill(d.label,d.sector);});
+
+const sim=d3.forceSimulation(nodes)
+  .force('link',d3.forceLink(links).id(d=>d.id).distance(d=>70+d.target.r))
+  .force('charge',d3.forceManyBody().strength(-160))
+  .force('center',d3.forceCenter(W/2,H/2))
+  .force('collide',d3.forceCollide().radius(d=>d.r+6))
+  .on('tick',()=>{nodes[0].fx=W/2;nodes[0].fy=H/2;link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);node.attr('transform',d=>'translate('+d.x+','+d.y+')');});
+
+node.call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);if(!d.me){d.fx=null;d.fy=null;}}));
+
+const zoom=d3.zoom().scaleExtent([0.4,4]).on('zoom',e=>g.attr('transform',e.transform));
+svg.call(zoom);
+document.getElementById('zin').onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,1.4);
+document.getElementById('zout').onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,0.7);
+document.getElementById('zreset').onclick=()=>svg.transition().duration(350).call(zoom.transform,d3.zoomIdentity);
+
+function applyFilter(){
+  node.style('opacity',d=>d.me?1:(activeSectors.has(d.sector)?1:0.08));
+  link.style('opacity',d=>activeSectors.has(d.target.sector)?0.5:0.04);
+}
+
+document.getElementById('invToggle').onchange=function(){
+  if(this.checked){node.select('circle').attr('stroke','#BA7517').attr('stroke-width',d=>d.me?0:2.5);}
+  else{node.select('circle').attr('stroke',d=>d.me?'var(--color-text-primary)':'#fff').attr('stroke-width',d=>d.me?0:1.2);}
+};
+
+function esc(s){return (s||'').replace(/"/g,'&quot;');}
+function drill(name,sector){
+  const ppl=(PEOPLE[name]||[]).slice();
+  const cats={};ppl.forEach(p=>cats[p.c]=(cats[p.c]||0)+1);
+  const catArr=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  const maxc=Math.max(1,...catArr.map(c=>c[1]));
+  let bars=catArr.map(([c,n])=>'<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;"><span>'+c+'</span><span style="color:var(--color-text-secondary)">'+n+'</span></div><div style="height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:'+Math.round(n/maxc*100)+'%;background:'+(ROLECOL[c]||'#888')+';border-radius:3px;"></div></div></div>').join('');
+  let rows=ppl.map(p=>{
+    const nameCell = p.u ? '<a href="'+esc(p.u)+'" target="_blank" rel="noopener" style="color:var(--color-text-info);text-decoration:none;">'+p.n+' <i class="ti ti-external-link" style="font-size:12px;"></i></a>' : p.n;
+    return '<tr style="border-top:0.5px solid var(--color-border-tertiary);"><td style="padding:6px 8px 6px 0;font-size:13px;white-space:nowrap;">'+nameCell+'</td><td style="padding:6px 8px;font-size:12px;color:var(--color-text-secondary);">'+p.t+'</td><td style="padding:6px 0;font-size:12px;color:var(--color-text-tertiary);text-align:right;">'+(p.y||'')+'</td></tr>';
+  }).join('');
+  document.getElementById('drill').innerHTML=
+   '<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;">'
+   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+   +'<div style="display:flex;align-items:center;gap:10px;"><span style="width:14px;height:14px;border-radius:50%;background:'+SECTORS[sector]+';"></span><span style="font-size:18px;font-weight:500;">'+name+'</span><span style="font-size:13px;color:var(--color-text-secondary);">'+ppl.length+' connections · '+sector+'</span></div>'
+   +'<button id="drillClose" style="font-size:12px;padding:4px 10px;">Close</button></div>'
+   +'<div style="margin-bottom:14px;">'+bars+'</div>'
+   +'<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;">Names link to LinkedIn profiles</div>'
+   +'<div style="max-height:320px;overflow:auto;"><table style="width:100%;"><thead><tr style="text-align:left;"><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Name</th><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Title</th><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;text-align:right;">Yr</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+   +'</div>';
+  document.getElementById('drillClose').onclick=()=>document.getElementById('drill').innerHTML='';
+  document.getElementById('drill').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+applyFilter();
+})();
+</script>
+</body>
+</html>

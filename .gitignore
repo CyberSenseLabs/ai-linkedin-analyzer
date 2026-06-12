@@ -1,0 +1,13 @@
+# Raw LinkedIn data exports — never commit these
+*LinkedInDataExport*
+*.zip
+linkedin_export/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
