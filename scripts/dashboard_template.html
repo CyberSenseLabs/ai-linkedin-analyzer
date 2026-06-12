@@ -32,6 +32,24 @@ a{color:var(--color-text-info);}
 <h1>AI LinkedIn Analyzer</h1>
 <p class="sub">Interactive network map of your LinkedIn connections, clustered by company and coloured by sector. Click a company to drill into the individuals you're connected with there.</p>
 
+<div id="uploadBar" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:0.75rem 1rem;margin-bottom:0.5rem;">
+  <div style="font-size:13px;color:var(--color-text-secondary);max-width:480px;">
+    <strong style="color:var(--color-text-primary);">Load your LinkedIn export</strong> — upload the <code>.zip</code> from
+    <em>Settings &amp; Privacy → Data privacy → Get a copy of your data</em>. It's parsed entirely in your
+    browser; nothing is uploaded anywhere.
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <input type="file" id="fileInput" accept=".zip" style="display:none;">
+    <button id="uploadBtn"><i class="ti ti-upload" style="vertical-align:-2px;margin-right:5px;"></i>Upload export (.zip)</button>
+    <button id="resetBtn" style="display:none;"><i class="ti ti-refresh" style="vertical-align:-2px;margin-right:5px;"></i>Reset</button>
+  </div>
+</div>
+<div id="uploadStatus" style="display:none;align-items:center;gap:8px;border-radius:var(--border-radius-md);padding:0.6rem 0.9rem;font-size:13px;margin:0.5rem 0 1rem;"></div>
+<style>
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--color-border-secondary);border-top-color:var(--color-text-info);border-radius:50%;animation:spin .7s linear infinite;}
+</style>
+
 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0.5rem 0 0.75rem;">
   <span style="font-size:13px;color:var(--color-text-secondary);margin-right:4px;">Filter sector:</span>
   <span id="filters"></span>
@@ -68,87 +86,182 @@ a{color:var(--color-text-info);}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function(){
-const PEOPLE = /*__PEOPLE__*/;
-const FLAGGED = /*__FLAGGED__*/;
-const SCAN = /*__SCAN__*/;
-const SECTOR_OF = {};
-const SECTORS={'Banking & finance':'#378ADD','Telco & infrastructure':'#1D9E75','Security & consulting':'#7F77DD','Cloud & tech':'#D85A30','Utilities':'#BA7517','Education':'#D4537E'};
-const SECDARK={'Banking & finance':'#0C447C','Telco & infrastructure':'#0F6E56','Security & consulting':'#3C3489','Cloud & tech':'#993C1D','Utilities':'#633806','Education':'#72243E'};
+// The dashboard always starts empty — load an export via the upload button below.
+const INITIAL_PEOPLE = {};
+const INITIAL_FLAGGED = [];
+const INITIAL_SCAN = {total: 0, flagged: 0, redacted: 0, enriched: 0, min_score: 3};
+
+const SECTORS={'Banking & finance':'#378ADD','Telco & infrastructure':'#1D9E75','Security & consulting':'#7F77DD','Cloud & tech':'#D85A30','Utilities':'#BA7517','Education':'#D4537E','Other':'#888780'};
+const SECDARK={'Banking & finance':'#0C447C','Telco & infrastructure':'#0F6E56','Security & consulting':'#3C3489','Cloud & tech':'#993C1D','Utilities':'#633806','Education':'#72243E','Other':'#4A4A48'};
 const COMPANY_SECTOR={'ANZ':'Banking & finance','Commonwealth Bank':'Banking & finance','NAB':'Banking & finance','Telstra':'Telco & infrastructure','Optus':'Telco & infrastructure','nbn® Australia':'Telco & infrastructure','Australia Post':'Telco & infrastructure','Infotrust':'Security & consulting','Versent':'Security & consulting','Accenture':'Security & consulting','Self-employed':'Security & consulting','Hays':'Security & consulting','Logicalis AP':'Security & consulting','Rapid7':'Security & consulting','Vanta':'Security & consulting','Freelance':'Security & consulting','CyberCX':'Security & consulting','AWS':'Cloud & tech','Cisco':'Cloud & tech','Microsoft':'Cloud & tech','Google':'Cloud & tech','Yarra Valley Water':'Utilities','La Trobe University':'Education','RMIT University':'Education','Uni of Melbourne':'Education'};
 const ROLECOL={'Exec':'#7F77DD','Director/Head':'#534AB7','Security':'#1D9E75','Risk/Compliance':'#378ADD','Architecture':'#D85A30','Engineering':'#BA7517','Consulting':'#D4537E','Management':'#888780','Sales/BD':'#639922','Analyst':'#085041','Recruitment':'#993C1D','Other':'#B4B2A9'};
 
-const companies = Object.keys(PEOPLE).map(name=>[name, PEOPLE[name].length, COMPANY_SECTOR[name]||'Security & consulting'])
-  .sort((a,b)=>b[1]-a[1]);
-companies.forEach(([n,,s])=>SECTOR_OF[n]=s);
+// --- Building a dashboard dataset from an uploaded export (mirrors scripts/build_dashboard.py
+// and scripts/scoring.py, so a browser upload scores identically to the CLI build) -----------
 
-const W=680,H=470;
-let activeSectors=new Set(Object.keys(SECTORS));
+const TOP_N=25, TITLE_MAX=70, SCAN_MIN_SCORE=3;
 
-const lg=document.getElementById('legend');
-Object.entries(SECTORS).forEach(([k,c])=>{const s=document.createElement('span');s.style.cssText='display:flex;align-items:center;gap:5px;';s.innerHTML='<span style="width:11px;height:11px;border-radius:50%;background:'+c+';display:inline-block;"></span>'+k;lg.appendChild(s);});
+const ROLE_MAP=[
+  ['Exec',['ceo','cto','ciso','cfo','coo','chief','founder','owner','managing director','president']],
+  ['Director/Head',['director','head of','vp','vice president','partner']],
+  ['Security',['security','cyber','grc','soc','threat']],
+  ['Risk/Compliance',['risk','compliance','audit','assurance','governance']],
+  ['Architecture',['architect']],
+  ['Engineering',['engineer','developer','devops','sre']],
+  ['Consulting',['consultant','advisor','consulting']],
+  ['Management',['manager','lead','program','project']],
+  ['Sales/BD',['sales','business development','account','partnership']],
+  ['Analyst',['analyst']],
+  ['Recruitment',['recruit','talent']],
+];
 
-const ff=document.getElementById('filters');
-Object.keys(SECTORS).forEach(sec=>{
-  const b=document.createElement('button');
-  b.textContent=sec;
-  b.style.cssText='font-size:12px;padding:3px 10px;margin:2px;border-radius:14px;border:0.5px solid '+SECTORS[sec]+';background:'+SECTORS[sec]+';color:#fff;cursor:pointer;';
-  b.onclick=()=>{
-    if(activeSectors.has(sec)){activeSectors.delete(sec);b.style.background='transparent';b.style.color=SECDARK[sec];}
-    else{activeSectors.add(sec);b.style.background=SECTORS[sec];b.style.color='#fff';}
-    applyFilter();
-  };
-  ff.appendChild(b);
-});
+const SCAM_TERMS=['crypto','bitcoin','forex','binary option','binary options','trader','trading coach','investment opportunity','guaranteed return','1000x','double your','passive income','work from home','earn from home','make money','financial freedom','loan','sugar daddy','sugar baby','escort','onlyofans','onlyfans','adult content','hookup','dating','telegram','whatsapp me','dm me','dm for','click the link','click link','herbalife','forever living','arbonne','mlm','ponzi','giveaway','free money','btc','usdt'];
+const NAME_SCAM_HINTS=SCAM_TERMS.concat(['http','www.','.com','@','official','vip']);
+const CONTACT_IN_TITLE=/(https?:\/\/|www\.|t\.me\/|@[\w.]+|\+?\d[\d ()-]{8,})/i;
+const EMOJI=/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}]/u;
+const NON_NAME=/[0-9$£€!?*#~^=<>{}[\]|\\/]/;
+const HEURISTIC_WEIGHTS={no_company_or_title:3,no_title:1,scam_term_in_title:3,promo_text_in_name:3,contact_in_title:2,missing_name_part:2,symbols_in_name:2,emoji_in_name:1,implausibly_short_name:2,all_caps_name:1,duplicate_url:2,duplicate_empty_profile:2,no_url:1};
 
-const nodes=[{id:'__me',label:'You',me:true,r:26}];
-const links=[];
-companies.forEach(([name,n,sec])=>{nodes.push({id:name,label:name,count:n,sector:sec,color:SECTORS[sec],r:6+Math.sqrt(n)*2.4});links.push({source:'__me',target:name,w:n});});
-
-const svg=d3.select('#net');
-const g=svg.append('g');
-const link=g.append('g').selectAll('line').data(links).join('line')
-  .attr('stroke-opacity',0.5).attr('stroke','var(--color-border-secondary)').attr('stroke-width',d=>0.5+Math.sqrt(d.w)/3);
-const node=g.append('g').selectAll('g').data(nodes).join('g').style('cursor','pointer');
-node.append('circle').attr('r',d=>d.r).attr('fill',d=>d.me?'var(--color-text-primary)':d.color)
-  .attr('stroke',d=>d.me?'var(--color-text-primary)':'#fff').attr('stroke-width',d=>d.me?0:1.2);
-node.append('text').text(d=>d.me?'YOU':(d.count>=12?d.label:'')).attr('text-anchor','middle')
-  .attr('dy',d=>d.me?4:-d.r-4).attr('font-size',d=>d.me?11:10).attr('font-weight',500)
-  .attr('fill',d=>d.me?'var(--color-background-primary)':'var(--color-text-primary)').style('pointer-events','none');
-
-const tip=document.getElementById('tip');
-node.on('mousemove',function(e,d){if(d.me)return;const r=svg.node().getBoundingClientRect();tip.style.opacity=1;tip.style.left=(e.clientX-r.left+12)+'px';tip.style.top=(e.clientY-r.top+12)+'px';tip.innerHTML='<strong>'+d.label+'</strong><br>'+d.count+' connections<br><span style="color:var(--color-text-secondary)">'+d.sector+'</span><br><span style="color:var(--color-text-tertiary)">click to drill in</span>';})
-.on('mouseleave',()=>tip.style.opacity=0)
-.on('click',(e,d)=>{if(!d.me)drill(d.label,d.sector);});
-
-const sim=d3.forceSimulation(nodes)
-  .force('link',d3.forceLink(links).id(d=>d.id).distance(d=>70+d.target.r))
-  .force('charge',d3.forceManyBody().strength(-160))
-  .force('center',d3.forceCenter(W/2,H/2))
-  .force('collide',d3.forceCollide().radius(d=>d.r+6))
-  .on('tick',()=>{nodes[0].fx=W/2;nodes[0].fy=H/2;link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);node.attr('transform',d=>'translate('+d.x+','+d.y+')');});
-
-node.call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);if(!d.me){d.fx=null;d.fy=null;}}));
-
-const zoom=d3.zoom().scaleExtent([0.4,4]).on('zoom',e=>g.attr('transform',e.transform));
-svg.call(zoom);
-document.getElementById('zin').onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,1.4);
-document.getElementById('zout').onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,0.7);
-document.getElementById('zreset').onclick=()=>svg.transition().duration(350).call(zoom.transform,d3.zoomIdentity);
-
-function applyFilter(){
-  node.style('opacity',d=>d.me?1:(activeSectors.has(d.sector)?1:0.08));
-  link.style('opacity',d=>activeSectors.has(d.target.sector)?0.5:0.04);
+function normaliseCompany(name){
+  const n=(name||'').trim();
+  const low=n.toLowerCase();
+  if(low.includes('infotrust')) return 'Infotrust';
+  if(n==='Amazon Web Services (AWS)') return 'AWS';
+  if(low.includes('logicalis')) return 'Logicalis AP';
+  if(low.includes('university of melbourne')) return 'Uni of Melbourne';
+  return n;
 }
 
-document.getElementById('invToggle').onchange=function(){
-  if(this.checked){node.select('circle').attr('stroke','#BA7517').attr('stroke-width',d=>d.me?0:2.5);}
-  else{node.select('circle').attr('stroke',d=>d.me?'var(--color-text-primary)':'#fff').attr('stroke-width',d=>d.me?0:1.2);}
-};
+function categorize(position){
+  const p=(position||'').toLowerCase();
+  for(const [label,kws] of ROLE_MAP){
+    if(kws.some(k=>p.includes(k))) return label;
+  }
+  return 'Other';
+}
+
+// Minimal RFC4180-ish CSV parser (handles quoted fields, embedded commas/newlines).
+function parseCSV(text){
+  const out=[];
+  let row=[], field='', inQuotes=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQuotes){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQuotes=false; }
+      else field+=c;
+    } else {
+      if(c==='"') inQuotes=true;
+      else if(c===','){row.push(field);field='';}
+      else if(c==='\r'){}
+      else if(c==='\n'){row.push(field);out.push(row);row=[];field='';}
+      else field+=c;
+    }
+  }
+  if(field!==''||row.length){row.push(field);out.push(row);}
+  return out;
+}
+
+// LinkedIn prepends "Notes:" disclaimer lines before the real header row.
+function rowsToRecords(rows){
+  const headerIdx=rows.findIndex(r=>r[0]==='First Name');
+  if(headerIdx===-1) return [];
+  const headers=rows[headerIdx];
+  return rows.slice(headerIdx+1)
+    .filter(r=>r.length>1||(r[0]||'')!=='')
+    .map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]||'');return o;});
+}
+
+function isRedacted(r){
+  const name=`${(r['First Name']||'').trim()} ${(r['Last Name']||'').trim()}`.trim();
+  return !name && !(r['URL']||'').trim();
+}
+
+function heuristicScore(row,dupUrls,dupNames){
+  const W=HEURISTIC_WEIGHTS;
+  const first=(row['First Name']||'').trim();
+  const last=(row['Last Name']||'').trim();
+  const name=`${first} ${last}`.trim();
+  const company=(row['Company']||'').trim();
+  const position=(row['Position']||'').trim();
+  const url=(row['URL']||'').trim();
+  const nameLc=name.toLowerCase(), posLc=position.toLowerCase();
+  let pts=0; const reasons=[];
+
+  if(!company && !position){pts+=W.no_company_or_title;reasons.push('no company or job title');}
+  else if(!position){pts+=W.no_title;reasons.push('no job title');}
+
+  if(SCAM_TERMS.some(t=>posLc.includes(t))){pts+=W.scam_term_in_title;reasons.push('scam/spam term in job title');}
+  if(NAME_SCAM_HINTS.some(h=>nameLc.includes(h))){pts+=W.promo_text_in_name;reasons.push('promotional text in name');}
+  if(position && CONTACT_IN_TITLE.test(position)){pts+=W.contact_in_title;reasons.push('contact info / link in job title');}
+
+  if(!first || !last){pts+=W.missing_name_part;reasons.push('missing first or last name');}
+  if(NON_NAME.test(name)){pts+=W.symbols_in_name;reasons.push('digits/symbols in name');}
+  if(EMOJI.test(name)){pts+=W.emoji_in_name;reasons.push('emoji in name');}
+  if(name && name.replace(/ /g,'').length<=2){pts+=W.implausibly_short_name;reasons.push('implausibly short name');}
+  if(name && name===name.toUpperCase() && name.length>4){pts+=W.all_caps_name;reasons.push('name in ALL CAPS');}
+
+  if(url && (dupUrls[url]||0)>1){pts+=W.duplicate_url;reasons.push('duplicate profile URL');}
+  if(name && !company && !position && (dupNames[nameLc]||0)>1){pts+=W.duplicate_empty_profile;reasons.push('duplicate empty profile');}
+  if(!url){pts+=W.no_url;reasons.push('no profile URL');}
+
+  return [pts,reasons];
+}
+
+function scanSuspicious(records){
+  const dupUrls={}, dupNames={};
+  records.forEach(r=>{const u=(r['URL']||'').trim(); if(u) dupUrls[u]=(dupUrls[u]||0)+1;});
+  records.forEach(r=>{const n=`${(r['First Name']||'').trim()} ${(r['Last Name']||'').trim()}`.trim().toLowerCase(); dupNames[n]=(dupNames[n]||0)+1;});
+
+  const flagged=[]; let redacted=0;
+  records.forEach(r=>{
+    if(isRedacted(r)){redacted++;return;}
+    const [pts,reasons]=heuristicScore(r,dupUrls,dupNames);
+    if(pts<SCAN_MIN_SCORE) return;
+    flagged.push({
+      n:`${(r['First Name']||'').trim()} ${(r['Last Name']||'').trim()}`.trim(),
+      u:(r['URL']||'').trim(), co:(r['Company']||'').trim(), t:(r['Position']||'').trim(),
+      d:(r['Connected On']||'').trim(), sc:pts, rs:reasons, esc:null, ers:null, trust:null,
+    });
+  });
+  flagged.sort((a,b)=>b.sc-a.sc);
+  return {flagged, summary:{total:records.length, flagged:flagged.length, redacted, enriched:0, min_score:SCAN_MIN_SCORE}};
+}
+
+function buildFromRecords(records){
+  const counts={};
+  records.forEach(r=>{const c=normaliseCompany(r['Company']); if(c) counts[c]=(counts[c]||0)+1;});
+  const top=new Set(Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,TOP_N).map(e=>e[0]));
+
+  const people={};
+  records.forEach(r=>{
+    const company=normaliseCompany(r['Company']);
+    if(!top.has(company)) return;
+    const position=(r['Position']||'').trim().slice(0,TITLE_MAX);
+    const connected=(r['Connected On']||'').trim();
+    let year='';
+    if(connected){const d=new Date(connected); if(!isNaN(d)) year=String(d.getFullYear());}
+    (people[company]=people[company]||[]).push({
+      n:`${(r['First Name']||'').trim()} ${(r['Last Name']||'').trim()}`.trim(),
+      t:position, y:year, u:(r['URL']||'').trim(), c:categorize(position),
+    });
+  });
+  Object.values(people).forEach(arr=>arr.sort((a,b)=>(b.y||'').localeCompare(a.y||'')));
+
+  const {flagged,summary}=scanSuspicious(records);
+  return {people, flagged, scan:summary};
+}
+
+// --- Rendering ----------------------------------------------------------------------------
+
+const W=680,H=470;
+let sim=null;
 
 function esc(s){return (s||'').replace(/"/g,'&quot;');}
-function drill(name,sector){
+
+function drill(name,sector,PEOPLE){
   const ppl=(PEOPLE[name]||[]).slice();
   const cats={};ppl.forEach(p=>cats[p.c]=(cats[p.c]||0)+1);
   const catArr=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
@@ -177,7 +290,8 @@ function badge(score, enriched){
   const label = enriched!=null ? 'E'+enriched+' / H'+score : score;
   return '<span style="background:'+bg+';color:#fff;font-size:11px;font-weight:500;padding:2px 7px;border-radius:10px;white-space:nowrap;">'+label+'</span>';
 }
-function renderScan(){
+
+function renderScan(FLAGGED,SCAN){
   const host=document.getElementById('scanResult');
   const rows=FLAGGED.map(f=>{
     const reasons=(f.ers&&f.ers.length?f.ers:f.rs)||[];
@@ -200,9 +314,157 @@ function renderScan(){
       ? '<div style="max-height:360px;overflow:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;"><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Score</th><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Connection</th><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Why flagged</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       : '<div style="color:var(--color-text-secondary);font-size:13px;">No connections met the suspicion threshold — your network looks authentic.</div>');
 }
-document.getElementById('scanBtn').onclick=renderScan;
 
-applyFilter();
+function render(PEOPLE, FLAGGED, SCAN){
+  if(sim) sim.stop();
+
+  const legendEl=document.getElementById('legend'); legendEl.innerHTML='';
+  const filtersEl=document.getElementById('filters'); filtersEl.innerHTML='';
+  document.getElementById('drill').innerHTML='';
+  document.getElementById('scanResult').innerHTML='';
+  const tip=document.getElementById('tip'); tip.style.opacity=0;
+  const svg=d3.select('#net'); svg.selectAll('*').remove();
+
+  const SECTOR_OF={};
+  const companies=Object.keys(PEOPLE).map(name=>[name, PEOPLE[name].length, COMPANY_SECTOR[name]||'Other']).sort((a,b)=>b[1]-a[1]);
+  companies.forEach(([n,,s])=>SECTOR_OF[n]=s);
+
+  const sectorsPresent=new Set(companies.map(c=>c[2]));
+  const orderedSectors=Object.keys(SECTORS).filter(s=>sectorsPresent.has(s));
+  let activeSectors=new Set(orderedSectors);
+
+  orderedSectors.forEach(k=>{
+    const c=SECTORS[k];
+    const s=document.createElement('span'); s.style.cssText='display:flex;align-items:center;gap:5px;';
+    s.innerHTML='<span style="width:11px;height:11px;border-radius:50%;background:'+c+';display:inline-block;"></span>'+k;
+    legendEl.appendChild(s);
+  });
+
+  orderedSectors.forEach(sec=>{
+    const b=document.createElement('button');
+    b.textContent=sec;
+    b.style.cssText='font-size:12px;padding:3px 10px;margin:2px;border-radius:14px;border:0.5px solid '+SECTORS[sec]+';background:'+SECTORS[sec]+';color:#fff;cursor:pointer;';
+    b.onclick=()=>{
+      if(activeSectors.has(sec)){activeSectors.delete(sec);b.style.background='transparent';b.style.color=SECDARK[sec];}
+      else{activeSectors.add(sec);b.style.background=SECTORS[sec];b.style.color='#fff';}
+      applyFilter();
+    };
+    filtersEl.appendChild(b);
+  });
+
+  const nodes=[{id:'__me',label:'You',me:true,r:26}];
+  const links=[];
+  companies.forEach(([name,n,sec])=>{nodes.push({id:name,label:name,count:n,sector:sec,color:SECTORS[sec],r:6+Math.sqrt(n)*2.4});links.push({source:'__me',target:name,w:n});});
+
+  const g=svg.append('g');
+  const link=g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke-opacity',0.5).attr('stroke','var(--color-border-secondary)').attr('stroke-width',d=>0.5+Math.sqrt(d.w)/3);
+  const node=g.append('g').selectAll('g').data(nodes).join('g').style('cursor','pointer');
+  node.append('circle').attr('r',d=>d.r).attr('fill',d=>d.me?'var(--color-text-primary)':d.color)
+    .attr('stroke',d=>d.me?'var(--color-text-primary)':'#fff').attr('stroke-width',d=>d.me?0:1.2);
+  node.append('text').text(d=>d.me?'YOU':(d.count>=12?d.label:'')).attr('text-anchor','middle')
+    .attr('dy',d=>d.me?4:-d.r-4).attr('font-size',d=>d.me?11:10).attr('font-weight',500)
+    .attr('fill',d=>d.me?'var(--color-background-primary)':'var(--color-text-primary)').style('pointer-events','none');
+
+  node.on('mousemove',function(e,d){if(d.me)return;const r=svg.node().getBoundingClientRect();tip.style.opacity=1;tip.style.left=(e.clientX-r.left+12)+'px';tip.style.top=(e.clientY-r.top+12)+'px';tip.innerHTML='<strong>'+d.label+'</strong><br>'+d.count+' connections<br><span style="color:var(--color-text-secondary)">'+d.sector+'</span><br><span style="color:var(--color-text-tertiary)">click to drill in</span>';})
+  .on('mouseleave',()=>tip.style.opacity=0)
+  .on('click',(e,d)=>{if(!d.me)drill(d.label,d.sector,PEOPLE);});
+
+  sim=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(links).id(d=>d.id).distance(d=>70+d.target.r))
+    .force('charge',d3.forceManyBody().strength(-160))
+    .force('center',d3.forceCenter(W/2,H/2))
+    .force('collide',d3.forceCollide().radius(d=>d.r+6))
+    .on('tick',()=>{nodes[0].fx=W/2;nodes[0].fy=H/2;link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);node.attr('transform',d=>'translate('+d.x+','+d.y+')');});
+
+  node.call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);if(!d.me){d.fx=null;d.fy=null;}}));
+
+  const zoom=d3.zoom().scaleExtent([0.4,4]).on('zoom',e=>g.attr('transform',e.transform));
+  svg.call(zoom);
+  document.getElementById('zin').onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,1.4);
+  document.getElementById('zout').onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,0.7);
+  document.getElementById('zreset').onclick=()=>svg.transition().duration(350).call(zoom.transform,d3.zoomIdentity);
+
+  function applyFilter(){
+    node.style('opacity',d=>d.me?1:(activeSectors.has(d.sector)?1:0.08));
+    link.style('opacity',d=>activeSectors.has(d.target.sector)?0.5:0.04);
+  }
+
+  const invToggle=document.getElementById('invToggle');
+  invToggle.checked=false;
+  invToggle.onchange=function(){
+    if(this.checked){node.select('circle').attr('stroke','#BA7517').attr('stroke-width',d=>d.me?0:2.5);}
+    else{node.select('circle').attr('stroke',d=>d.me?'var(--color-text-primary)':'#fff').attr('stroke-width',d=>d.me?0:1.2);}
+  };
+
+  document.getElementById('scanBtn').onclick=()=>renderScan(FLAGGED,SCAN);
+
+  applyFilter();
+}
+
+render(INITIAL_PEOPLE, INITIAL_FLAGGED, INITIAL_SCAN);
+
+// --- Upload wiring --------------------------------------------------------------------------
+
+const fileInput=document.getElementById('fileInput');
+const uploadBtn=document.getElementById('uploadBtn');
+const status=document.getElementById('uploadStatus');
+const resetBtn=document.getElementById('resetBtn');
+
+function setStatus(html, kind){
+  status.innerHTML=html;
+  status.style.display=html?'flex':'none';
+  const colors={
+    info:['var(--color-background-info)','var(--color-text-info)'],
+    success:['var(--color-background-info)','var(--color-text-info)'],
+    error:['rgba(163,45,45,0.12)','#A32D2D'],
+  };
+  const [bg,fg]=colors[kind]||colors.info;
+  status.style.background=bg;
+  status.style.color=fg;
+}
+
+document.getElementById('uploadBtn').onclick=()=>fileInput.click();
+
+fileInput.onchange=async (e)=>{
+  const file=e.target.files[0];
+  e.target.value='';
+  if(!file) return;
+
+  uploadBtn.disabled=true;
+  setStatus('<span class="spinner"></span> Reading <strong>'+esc(file.name)+'</strong>…', 'info');
+
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const entry=Object.values(zip.files).find(f=>!f.dir && /connections\.csv$/i.test(f.name));
+    if(!entry){
+      setStatus('<i class="ti ti-alert-circle"></i> Could not find a Connections.csv inside this archive. Make sure you uploaded the LinkedIn data export .zip.', 'error');
+      return;
+    }
+    setStatus('<span class="spinner"></span> Found Connections.csv — analysing your network…', 'info');
+    const text=await entry.async('string');
+    const records=rowsToRecords(parseCSV(text));
+    if(!records.length){
+      setStatus('<i class="ti ti-alert-circle"></i> Connections.csv was found but contained no rows.', 'error');
+      return;
+    }
+    const {people,flagged,scan}=buildFromRecords(records);
+    render(people,flagged,scan);
+    setStatus('<i class="ti ti-circle-check"></i> Loaded <strong>'+scan.total+'</strong> connections ('+Object.keys(people).length+' companies, '+scan.flagged+' flagged) — processed locally in your browser.', 'success');
+    resetBtn.style.display='inline-block';
+    document.getElementById('net').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(err){
+    setStatus('<i class="ti ti-alert-circle"></i> Could not process that file: '+esc(err.message), 'error');
+  }finally{
+    uploadBtn.disabled=false;
+  }
+};
+
+resetBtn.onclick=()=>{
+  render(INITIAL_PEOPLE, INITIAL_FLAGGED, INITIAL_SCAN);
+  setStatus('', 'info');
+  resetBtn.style.display='none';
+};
 })();
 </script>
 </body>

@@ -153,20 +153,20 @@ def build(export_dir: Path):
     for company in people:
         people[company].sort(key=lambda p: p["y"], reverse=True)
 
-    # Persist the extracted dataset, then render the dashboard.
+    # Persist the extracted dataset for offline analysis.
     data_path = REPO_ROOT / "data" / "company_people.json"
     data_path.parent.mkdir(exist_ok=True)
     data_path.write_text(json.dumps(people, ensure_ascii=False, indent=0))
 
-    flagged, summary = scan_suspicious(rows)
+    _flagged, summary = scan_suspicious(rows)
 
+    # The dashboard itself always starts with no data baked in — it loads an
+    # export via the in-browser upload feature (see dashboard_template.html),
+    # so nobody's personal data ends up committed to the repo.
     template = (REPO_ROOT / "scripts" / "dashboard_template.html").read_text()
-    out = (template
-           .replace("/*__PEOPLE__*/", json.dumps(people, ensure_ascii=False))
-           .replace("/*__FLAGGED__*/", json.dumps(flagged, ensure_ascii=False))
-           .replace("/*__SCAN__*/", json.dumps(summary, ensure_ascii=False)))
-    (REPO_ROOT / "dashboard" / "index.html").write_text(out)
-    print(f"Wrote dashboard/index.html ({len(top)} companies, "
+    (REPO_ROOT / "dashboard" / "index.html").write_text(template)
+    print(f"Wrote dashboard/index.html (empty starter — load an export via the GUI)")
+    print(f"Wrote data/company_people.json ({len(top)} companies, "
           f"{sum(len(v) for v in people.values())} people; "
           f"{summary['flagged']} flagged, {summary['redacted']} redacted)")
 
