@@ -56,10 +56,23 @@ a{color:var(--color-text-info);}
 
 <div id="drill" style="margin-top:1rem;"></div>
 
+<div style="margin-top:1.5rem;border-top:0.5px solid var(--color-border-tertiary);padding-top:1.25rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-size:16px;font-weight:500;">Authenticity scan</div>
+      <div style="font-size:13px;color:var(--color-text-secondary);">Heuristically flags connections that look fake, spammy or low-information.</div>
+    </div>
+    <button id="scanBtn"><i class="ti ti-shield-search" style="vertical-align:-2px;margin-right:5px;"></i>Run authenticity scan</button>
+  </div>
+  <div id="scanResult" style="margin-top:1rem;"></div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script>
 (function(){
 const PEOPLE = /*__PEOPLE__*/;
+const FLAGGED = /*__FLAGGED__*/;
+const SCAN = /*__SCAN__*/;
 const SECTOR_OF = {};
 const SECTORS={'Banking & finance':'#378ADD','Telco & infrastructure':'#1D9E75','Security & consulting':'#7F77DD','Cloud & tech':'#D85A30','Utilities':'#BA7517','Education':'#D4537E'};
 const SECDARK={'Banking & finance':'#0C447C','Telco & infrastructure':'#0F6E56','Security & consulting':'#3C3489','Cloud & tech':'#993C1D','Utilities':'#633806','Education':'#72243E'};
@@ -157,6 +170,37 @@ function drill(name,sector){
   document.getElementById('drillClose').onclick=()=>document.getElementById('drill').innerHTML='';
   document.getElementById('drill').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+
+function badge(score, enriched){
+  const strong = (enriched!=null && enriched>=4) || score>=6;
+  const bg = strong ? '#A32D2D' : (score>=4 ? '#854F0B' : '#5F5E5A');
+  const label = enriched!=null ? 'E'+enriched+' / H'+score : score;
+  return '<span style="background:'+bg+';color:#fff;font-size:11px;font-weight:500;padding:2px 7px;border-radius:10px;white-space:nowrap;">'+label+'</span>';
+}
+function renderScan(){
+  const host=document.getElementById('scanResult');
+  const rows=FLAGGED.map(f=>{
+    const reasons=(f.ers&&f.ers.length?f.ers:f.rs)||[];
+    const trust=(f.trust&&f.trust.length)?' · <span style="color:var(--color-text-info)">trust: '+f.trust.join(', ')+'</span>':'';
+    const nameCell=f.u?'<a href="'+esc(f.u)+'" target="_blank" rel="noopener" style="color:var(--color-text-info);text-decoration:none;">'+f.n+'</a>':(f.n||'(blank)');
+    return '<tr style="border-top:0.5px solid var(--color-border-tertiary);vertical-align:top;">'
+      +'<td style="padding:7px 8px 7px 0;">'+badge(f.sc,f.esc)+'</td>'
+      +'<td style="padding:7px 8px 7px 0;font-size:13px;white-space:nowrap;">'+nameCell+'<div style="font-size:11px;color:var(--color-text-tertiary);">'+(f.t||'no title')+(f.co?' @ '+f.co:'')+'</div></td>'
+      +'<td style="padding:7px 0;font-size:12px;color:var(--color-text-secondary);">'+reasons.join('; ')+trust+'</td>'
+      +'</tr>';
+  }).join('');
+  host.innerHTML=
+    '<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:0.75rem 1rem;font-size:13px;margin-bottom:10px;">'
+    +'Scanned <strong>'+SCAN.total+'</strong> connections · <strong>'+SCAN.flagged+'</strong> flagged (score &ge; '+SCAN.min_score+') · '
+    +'<strong>'+SCAN.redacted+'</strong> privacy-redacted (not fakes)'
+    +(SCAN.enriched?' · <strong>'+SCAN.enriched+'</strong> enriched via Apify':'')
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px;">Badge: H = heuristic score (export fields), E = enrichment score (scraped profile, higher confidence). Higher = more suspicious.</div>'
+    +(FLAGGED.length
+      ? '<div style="max-height:360px;overflow:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;"><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Score</th><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Connection</th><th style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;padding-bottom:4px;">Why flagged</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      : '<div style="color:var(--color-text-secondary);font-size:13px;">No connections met the suspicion threshold — your network looks authentic.</div>');
+}
+document.getElementById('scanBtn').onclick=renderScan;
 
 applyFilter();
 })();

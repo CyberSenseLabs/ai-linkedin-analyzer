@@ -81,6 +81,81 @@ profile photo, account age), so detection happens in two tiers:
 runs without an Apify token. Real enrichment output (`data/enrichment.json`) is
 git-ignored.
 
+The same scan is available in the dashboard — click **Run authenticity scan** to
+see the flagged connections, their scores, and the reasons inline.
+
+## Scoring algorithm
+
+All scoring lives in [`scripts/scoring.py`](scripts/scoring.py) so the CLIs and
+the dashboard score identically. A connection accumulates **points** — higher is
+more suspicious — and is flagged when its score meets the threshold. There are two
+independent tiers.
+
+### Tier 1 — heuristic score (export fields only)
+
+Runs on every connection using just the export (`name, URL, email, company,
+position`). Each matched signal adds points:
+
+| Signal | Points |
+|---|---:|
+| No company **and** no job title | +3 |
+| Scam/spam term in job title (crypto, forex, "DM me", OnlyFans, "passive income", …) | +3 |
+| Promotional text in name (URL, "official", "VIP", "@…") | +3 |
+| Contact info / link in job title (phone, `t.me/`, URL) | +2 |
+| Missing first or last name | +2 |
+| Digits or symbols in name | +2 |
+| Duplicate profile URL (same link on 2+ rows) | +2 |
+| Duplicate empty profile (same name, no company/title, appears 2+ times) | +2 |
+| No job title (but has a company) | +1 |
+| Emoji in name | +1 |
+| Implausibly short name (≤2 chars) | +1 |
+| Name in ALL CAPS | +1 |
+| No profile URL | +1 |
+
+Default flag threshold: **score ≥ 3**.
+
+**Privacy-redacted rows are excluded.** A connection with a blank name *and* no
+URL has simply turned off "let connections export my data" — a privacy setting,
+the opposite of a bot. These are counted separately and never flagged.
+
+This tier is cheap but weak: it catches obvious spam/scam patterns but can't see
+the strongest fakeness signals, which aren't in the export.
+
+### Tier 2 — enrichment score (scraped profile)
+
+When a profile has been enriched (via `enrich_via_apify.py`), the strong signals
+become available and are scored independently:
+
+| Risk signal | Points |
+|---|---:|
+| Very low connections (< 50) | +3 |
+| No experience, education **or** certifications | +3 |
+| No profile photo | +2 |
+| Low connections (50–149) | +1 |
+| Very few followers (< 50) | +1 |
+| No experience or education (but has certs) | +1 |
+| No headline | +1 |
+| No about section **and** no skills | +1 |
+
+| Trust signal (reduces score) | Points |
+|---|---:|
+| LinkedIn Premium | −1 |
+| Influencer badge | −1 |
+| 3+ certifications | −1 |
+| 500+ connections | −1 |
+
+Scores are floored at 0. Default flag threshold: **score ≥ 4**.
+
+### How the two combine
+
+In the dashboard, a flagged connection shows a badge like `E2 / H3`: the
+enrichment score (`E`, higher confidence) and the heuristic score (`H`). A row is
+surfaced if its heuristic score ≥ 3 **or** its enrichment score ≥ 4, and rows are
+ranked by enrichment score first. Thresholds are tunable via `--min-score` on the
+CLIs and `SCAN_MIN_SCORE` in `build_dashboard.py`.
+
+These are triage aids, not proof — always review a flagged profile before acting.
+
 ## Local development
 
 Place your unzipped LinkedIn export in a `linkedin_export/` directory at the repo

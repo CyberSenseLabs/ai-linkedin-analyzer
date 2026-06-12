@@ -15,7 +15,10 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from scoring import heuristic_score, enrichment_score, is_redacted
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
+SCAN_MIN_SCORE = 3
 TOP_N = 25
 TITLE_MAX = 70
 
@@ -75,6 +78,53 @@ def load_rows(export_dir: Path):
     return list(csv.DictReader(lines[header_idx:]))
 
 
+def scan_suspicious(rows):
+    """Heuristic suspicion scan across ALL connections, optionally merged with
+    enrichment scores from data/enrichment.json. Returns (flagged_list, summary)."""
+    dup_urls = Counter((r.get("URL") or "").strip() for r in rows if (r.get("URL") or "").strip())
+    dup_names = Counter(
+        f"{(r.get('First Name') or '').strip()} {(r.get('Last Name') or '').strip()}".strip().lower()
+        for r in rows
+    )
+
+    # Optional enrichment overlay, keyed by profile slug.
+    enrich = {}
+    enrich_path = REPO_ROOT / "data" / "enrichment.json"
+    if enrich_path.exists():
+        for p in json.loads(enrich_path.read_text()):
+            slug = (p.get("publicIdentifier") or "").lower()
+            if slug:
+                pts, _name, reasons, trust, conns, has_photo = enrichment_score(p)
+                enrich[slug] = {"score": pts, "reasons": reasons, "trust": trust,
+                                "connections": conns, "photo": has_photo}
+
+    flagged, redacted = [], 0
+    for r in rows:
+        if is_redacted(r):
+            redacted += 1
+            continue
+        pts, reasons = heuristic_score(r, dup_urls, dup_names)
+        url = (r.get("URL") or "").strip()
+        slug = url.rstrip("/").split("/")[-1].lower() if url else ""
+        enriched = enrich.get(slug)
+        if pts < SCAN_MIN_SCORE and not (enriched and enriched["score"] >= 4):
+            continue
+        name = f"{(r.get('First Name') or '').strip()} {(r.get('Last Name') or '').strip()}".strip()
+        flagged.append({
+            "n": name, "u": url, "co": (r.get("Company") or "").strip(),
+            "t": (r.get("Position") or "").strip(), "d": (r.get("Connected On") or "").strip(),
+            "sc": pts, "rs": reasons,
+            "esc": enriched["score"] if enriched else None,
+            "ers": enriched["reasons"] if enriched else None,
+            "trust": enriched["trust"] if enriched else None,
+        })
+
+    flagged.sort(key=lambda f: -(f["esc"] if f["esc"] is not None else 0) * 100 - f["sc"])
+    summary = {"total": len(rows), "flagged": len(flagged), "redacted": redacted,
+               "enriched": len(enrich), "min_score": SCAN_MIN_SCORE}
+    return flagged, summary
+
+
 def build(export_dir: Path):
     rows = load_rows(export_dir)
 
@@ -108,11 +158,17 @@ def build(export_dir: Path):
     data_path.parent.mkdir(exist_ok=True)
     data_path.write_text(json.dumps(people, ensure_ascii=False, indent=0))
 
+    flagged, summary = scan_suspicious(rows)
+
     template = (REPO_ROOT / "scripts" / "dashboard_template.html").read_text()
-    out = template.replace("/*__PEOPLE__*/", json.dumps(people, ensure_ascii=False))
+    out = (template
+           .replace("/*__PEOPLE__*/", json.dumps(people, ensure_ascii=False))
+           .replace("/*__FLAGGED__*/", json.dumps(flagged, ensure_ascii=False))
+           .replace("/*__SCAN__*/", json.dumps(summary, ensure_ascii=False)))
     (REPO_ROOT / "dashboard" / "index.html").write_text(out)
     print(f"Wrote dashboard/index.html ({len(top)} companies, "
-          f"{sum(len(v) for v in people.values())} people)")
+          f"{sum(len(v) for v in people.values())} people; "
+          f"{summary['flagged']} flagged, {summary['redacted']} redacted)")
 
 
 def main():
