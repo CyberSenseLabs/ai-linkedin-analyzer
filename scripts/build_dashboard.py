@@ -170,6 +170,16 @@ def build(export_dir: Path):
           f"{sum(len(v) for v in people.values())} people; "
           f"{summary['flagged']} flagged, {summary['redacted']} redacted)")
 
+    # A no-build entry point: starts empty and lets anyone load their own
+    # export via the in-browser upload feature, no Python required.
+    empty_summary = {"total": 0, "flagged": 0, "redacted": 0, "enriched": 0, "min_score": SCAN_MIN_SCORE}
+    upload_out = (template
+                  .replace("/*__PEOPLE__*/", "{}")
+                  .replace("/*__FLAGGED__*/", "[]")
+                  .replace("/*__SCAN__*/", json.dumps(empty_summary, ensure_ascii=False)))
+    (REPO_ROOT / "dashboard" / "upload.html").write_text(upload_out)
+    print("Wrote dashboard/upload.html (empty starter — load any export via the GUI)")
+
 
 def main():
     if len(sys.argv) != 2:

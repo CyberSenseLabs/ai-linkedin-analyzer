@@ -85,9 +85,9 @@ a{color:var(--color-text-info);}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function(){
-const INITIAL_PEOPLE = /*__PEOPLE__*/;
-const INITIAL_FLAGGED = /*__FLAGGED__*/;
-const INITIAL_SCAN = /*__SCAN__*/;
+const INITIAL_PEOPLE = {};
+const INITIAL_FLAGGED = [];
+const INITIAL_SCAN = {"total": 0, "flagged": 0, "redacted": 0, "enriched": 0, "min_score": 3};
 
 const SECTORS={'Banking & finance':'#378ADD','Telco & infrastructure':'#1D9E75','Security & consulting':'#7F77DD','Cloud & tech':'#D85A30','Utilities':'#BA7517','Education':'#D4537E','Other':'#888780'};
 const SECDARK={'Banking & finance':'#0C447C','Telco & infrastructure':'#0F6E56','Security & consulting':'#3C3489','Cloud & tech':'#993C1D','Utilities':'#633806','Education':'#72243E','Other':'#4A4A48'};
