@@ -14,3 +14,6 @@ venv/
 
 # Live enrichment output (contains scraped third-party profile data)
 data/enrichment.json
+
+# Extracted per-company connection data (contains your real connections)
+data/company_people.json
