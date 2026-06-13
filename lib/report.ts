@@ -1,0 +1,254 @@
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { COMPANY_SECTOR } from "./constants";
+import type { DashboardData, FlaggedConnection } from "./types";
+
+const BRAND = "#185FA5";
+const GREY = "#5f5e5a";
+
+// Render a live SVG (with CSS-variable colours) to a PNG data URL by resolving
+// each element's computed fill/stroke, so it rasterises correctly off-DOM.
+async function svgToPng(svg: SVGSVGElement, scale = 2): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  try {
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    const origEls = svg.querySelectorAll("*");
+    const cloneEls = clone.querySelectorAll("*");
+    origEls.forEach((o, i) => {
+      const cs = getComputedStyle(o);
+      const c = cloneEls[i] as SVGElement | undefined;
+      if (!c) return;
+      if (cs.fill) c.setAttribute("fill", cs.fill);
+      if (cs.stroke && cs.stroke !== "none") c.setAttribute("stroke", cs.stroke);
+      if (cs.strokeWidth) c.setAttribute("stroke-width", cs.strokeWidth);
+      if (cs.opacity && cs.opacity !== "1") c.setAttribute("opacity", cs.opacity);
+    });
+
+    const vb = svg.viewBox.baseVal;
+    const w = vb && vb.width ? vb.width : svg.clientWidth || 680;
+    const h = vb && vb.height ? vb.height : svg.clientHeight || 470;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(w));
+    clone.setAttribute("height", String(h));
+    // A position/offset in the root SVG's inline style breaks rasterisation in
+    // Chrome (the image renders blank), so drop it — width/height + viewBox above
+    // fully define the output.
+    clone.removeAttribute("style");
+
+    const xml = new XMLSerializer().serializeToString(clone);
+    const src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = src;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL("image/png"), w, h };
+  } catch {
+    return null;
+  }
+}
+
+export async function generateReport(
+  data: DashboardData,
+  flagged: FlaggedConnection[],
+  svgEl?: SVGSVGElement | null,
+): Promise<void> {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const contentW = pageW - margin * 2;
+  const today = new Date();
+  const dateStr = today.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+  // jsPDF's built-in fonts are Latin-1 only; strip characters outside that range
+  // (emoji in scam-account names, "≥", smart quotes, etc.) so they don't render
+  // as garbage glyphs. The "why flagged" reasons still note e.g. "emoji in name".
+  const clean = (s: unknown) => String(s ?? "").replace(/[^\x00-\xFF]/g, "");
+
+  // --- Header -------------------------------------------------------------
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor("#1f1e1c");
+  doc.text("LinkedIn Network Analysis Report", margin, 56);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(GREY);
+  doc.text(
+    `Generated ${dateStr} · Processed locally in your browser — no data was transmitted.`,
+    margin,
+    72,
+  );
+  doc.setDrawColor(BRAND);
+  doc.setLineWidth(1.5);
+  doc.line(margin, 82, pageW - margin, 82);
+
+  // --- Summary ------------------------------------------------------------
+  const { scan, people } = data;
+  const companyCount = Object.keys(people).length;
+  let y = 104;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Summary", margin, y);
+  y += 8;
+
+  const summaryRows: [string, string][] = [
+    ["Total connections", String(scan.total)],
+    [`Companies mapped (top ${companyCount})`, String(companyCount)],
+    ["Flagged as suspicious", `${scan.flagged} (score >= ${scan.min_score})`],
+    ["Privacy-redacted (not fakes)", String(scan.redacted)],
+  ];
+  if (scan.enriched) summaryRows.push(["Enriched via Apify", String(scan.enriched)]);
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    theme: "plain",
+    styles: { fontSize: 10, cellPadding: 3, textColor: "#1f1e1c" },
+    columnStyles: { 0: { textColor: GREY, cellWidth: 220 }, 1: { fontStyle: "bold" } },
+    body: summaryRows,
+  });
+  // @ts-expect-error lastAutoTable is attached by the plugin
+  y = doc.lastAutoTable.finalY + 20;
+
+  // --- Network graph image ------------------------------------------------
+  if (svgEl) {
+    const png = await svgToPng(svgEl);
+    if (png) {
+      const imgW = contentW;
+      const imgH = (png.h / png.w) * imgW;
+      if (y + imgH > pageH - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.setTextColor("#1f1e1c");
+      doc.text("Network map", margin, y);
+      y += 10;
+      // "FAST" enables Flate compression — without it jsPDF embeds the bitmap
+      // uncompressed (~5 MB for this image); with it the report is a few hundred KB.
+      doc.addImage(png.dataUrl, "PNG", margin, y, imgW, imgH, undefined, "FAST");
+      y += imgH + 24;
+    }
+  }
+
+  // --- Connections by sector ---------------------------------------------
+  const sectorAgg: Record<string, { companies: number; connections: number }> = {};
+  Object.entries(people).forEach(([company, ppl]) => {
+    const sec = COMPANY_SECTOR[company] || "Other";
+    const a = (sectorAgg[sec] = sectorAgg[sec] || { companies: 0, connections: 0 });
+    a.companies += 1;
+    a.connections += ppl.length;
+  });
+  const sectorRows = Object.entries(sectorAgg)
+    .sort((a, b) => b[1].connections - a[1].connections)
+    .map(([sec, a]) => [clean(sec), String(a.companies), String(a.connections)]);
+
+  if (y > pageH - 160) {
+    doc.addPage();
+    y = margin;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Connections by sector", margin, y);
+  autoTable(doc, {
+    startY: y + 8,
+    margin: { left: margin, right: margin },
+    headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+    styles: { fontSize: 10, cellPadding: 4 },
+    head: [["Sector", "Companies", "Connections"]],
+    body: sectorRows,
+  });
+  // @ts-expect-error lastAutoTable is attached by the plugin
+  y = doc.lastAutoTable.finalY + 20;
+
+  // --- Top companies ------------------------------------------------------
+  const companyRows = Object.entries(people)
+    .map(([name, ppl]) => [clean(name), clean(COMPANY_SECTOR[name] || "Other"), String(ppl.length)])
+    .sort((a, b) => Number(b[2]) - Number(a[2]));
+
+  if (y > pageH - 120) {
+    doc.addPage();
+    y = margin;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor("#1f1e1c");
+  doc.text(`Top companies (${companyRows.length})`, margin, y);
+  autoTable(doc, {
+    startY: y + 8,
+    margin: { left: margin, right: margin },
+    headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+    styles: { fontSize: 9, cellPadding: 4 },
+    columnStyles: { 2: { halign: "right", cellWidth: 80 } },
+    head: [["Company", "Sector", "Connections"]],
+    body: companyRows,
+  });
+
+  // --- Authenticity scan --------------------------------------------------
+  doc.addPage();
+  y = margin + 16;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Authenticity scan — flagged connections", margin, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(GREY);
+  doc.text(
+    "H = heuristic score (export fields), E = enrichment score (scraped profile). Higher = more suspicious.",
+    margin,
+    y + 14,
+  );
+
+  if (flagged.length) {
+    const flaggedRows = flagged.map((f) => {
+      const score = f.esc != null ? `E${f.esc} / H${f.sc}` : `H${f.sc}`;
+      const who = clean(`${f.n || "(blank)"}\n${(f.t || "no title") + (f.co ? ` @ ${f.co}` : "")}`);
+      const reasons = (f.ers && f.ers.length ? f.ers : f.rs).join("; ");
+      const trust = f.trust && f.trust.length ? `\nTrust: ${f.trust.join(", ")}` : "";
+      return [score, who, clean(reasons + trust)];
+    });
+    autoTable(doc, {
+      startY: y + 26,
+      margin: { left: margin, right: margin },
+      headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+      styles: { fontSize: 8.5, cellPadding: 4, valign: "top" },
+      columnStyles: { 0: { cellWidth: 64 }, 1: { cellWidth: 180 } },
+      head: [["Score", "Connection", "Why flagged"]],
+      body: flaggedRows,
+    });
+  } else {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor("#1f1e1c");
+    doc.text("No connections met the suspicion threshold — your network looks authentic.", margin, y + 40);
+  }
+
+  // --- Footer (page numbers) on every page --------------------------------
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(GREY);
+    doc.text("AI LinkedIn Analyzer — generated locally, no data transmitted", margin, pageH - 20);
+    doc.text(`Page ${i} of ${pages}`, pageW - margin, pageH - 20, { align: "right" });
+  }
+
+  const iso = today.toISOString().slice(0, 10);
+  doc.save(`linkedin-network-report-${iso}.pdf`);
+}

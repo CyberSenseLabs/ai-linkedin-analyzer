@@ -32,6 +32,7 @@ export default function AnalyzerApp() {
   const [flagged, setFlagged] = useState<FlaggedConnection[]>([]);
   const [enriching, setEnriching] = useState(false);
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +77,21 @@ export default function AnalyzerApp() {
       setStatus({ kind: "error", text: `Could not process that file: ${message}` });
     }
   }, []);
+
+  const handleExport = async () => {
+    if (!data) return;
+    setExporting(true);
+    try {
+      const { generateReport } = await import("@/lib/report");
+      const svg = document.getElementById("netGraph") as SVGSVGElement | null;
+      await generateReport(data, flagged, svg);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setStatus({ kind: "error", text: `Could not generate the PDF report: ${message}` });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const reset = () => {
     setData(null);
@@ -199,6 +215,16 @@ export default function AnalyzerApp() {
             <i className="ti ti-upload" style={{ verticalAlign: -2, marginRight: 5 }} />
             Upload export (.zip)
           </button>
+          {data && (
+            <button onClick={handleExport} disabled={exporting}>
+              {exporting ? (
+                <span className="spinner" style={{ verticalAlign: -2, marginRight: 5 }} />
+              ) : (
+                <i className="ti ti-file-type-pdf" style={{ verticalAlign: -2, marginRight: 5 }} />
+              )}
+              Download PDF report
+            </button>
+          )}
           {data && (
             <button onClick={reset}>
               <i className="ti ti-refresh" style={{ verticalAlign: -2, marginRight: 5 }} />

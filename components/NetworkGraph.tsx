@@ -252,7 +252,7 @@ export default function NetworkGraph({
           maxWidth: 210,
         }}
       />
-      <svg ref={svgRef} viewBox="0 0 680 470" width="100%" style={{ display: "block", cursor: "grab" }} />
+      <svg id="netGraph" ref={svgRef} viewBox="0 0 680 470" width="100%" style={{ display: "block", cursor: "grab" }} />
       <div style={{ position: "absolute", left: 10, bottom: 8, fontSize: 11, color: "var(--color-text-tertiary)" }}>
         Click a company to drill into people · drag to rearrange
       </div>
