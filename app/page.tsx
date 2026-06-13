@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import CyberBackground from "@/components/CyberBackground";
 
 const FEATURES = [
   {
@@ -21,9 +22,12 @@ const FEATURES = [
 
 export default function LandingPage() {
   return (
-    <div>
+    <div style={{ position: "relative", zIndex: 1 }}>
+      <CyberBackground />
       <header
         style={{
+          position: "relative",
+          zIndex: 1,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
