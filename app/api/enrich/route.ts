@@ -9,8 +9,10 @@ import { NextRequest, NextResponse } from "next/server";
 const ACTOR = "harvestapi~linkedin-profile-scraper";
 const API = "https://api.apify.com/v2";
 const MAX_URLS = 200; // guard against runaway scraping cost on a single request
-const POLL_INTERVAL_MS = 4000;
-const MAX_POLLS = 60; // ~4 minutes
+const RUN_TIMEOUT_SECS = 280; // keep under Vercel's 300s function cap
+
+// Allow this route to run long enough for the Apify actor to finish.
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -42,55 +44,32 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Start the actor run.
-    const startRes = await fetch(`${API}/acts/${ACTOR}/runs?token=${encodeURIComponent(token)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profileScraperMode: "Profile details no email ($4 per 1k)",
-        queries: urls,
-      }),
-    });
+    // Run the actor synchronously and get its dataset items back in one request —
+    // avoids manual run-polling and the bugs that come with it.
+    const res = await fetch(
+      `${API}/acts/${ACTOR}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}&clean=true&timeout=${RUN_TIMEOUT_SECS}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileScraperMode: "Profile details no email ($4 per 1k)",
+          queries: urls,
+        }),
+      },
+    );
 
-    if (startRes.status === 401 || startRes.status === 403) {
+    if (res.status === 401 || res.status === 403) {
       return NextResponse.json({ error: "Apify rejected the token (unauthorised)." }, { status: 401 });
     }
-    if (!startRes.ok) {
-      const text = await startRes.text();
+    if (!res.ok) {
+      const text = await res.text();
       return NextResponse.json(
-        { error: `Apify failed to start the run (${startRes.status}): ${text.slice(0, 300)}` },
+        { error: `Apify run failed (${res.status}): ${text.slice(0, 300)}` },
         { status: 502 },
       );
     }
 
-    const run = (await startRes.json()).data;
-    const runId: string = run.id;
-    const datasetId: string = run.defaultDatasetId;
-
-    // Poll until the run finishes (or we hit the cap).
-    let status = run.status;
-    for (let i = 0; i < MAX_POLLS && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-      const sRes = await fetch(`${API}/actor-runs/${runId}?token=${encodeURIComponent(token)}`);
-      if (!sRes.ok) break;
-      status = (await sRes.json()).data.status;
-    }
-
-    if (status !== "SUCCEEDED") {
-      return NextResponse.json(
-        { error: `Apify run did not succeed (status: ${status}).` },
-        { status: 504 },
-      );
-    }
-
-    const itemsRes = await fetch(
-      `${API}/datasets/${datasetId}/items?token=${encodeURIComponent(token)}&clean=true`,
-    );
-    if (!itemsRes.ok) {
-      return NextResponse.json({ error: "Failed to fetch enrichment results from Apify." }, { status: 502 });
-    }
-    const items = await itemsRes.json();
-
+    const items = await res.json();
     return NextResponse.json({ items });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

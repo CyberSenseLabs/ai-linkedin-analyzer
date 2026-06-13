@@ -123,6 +123,11 @@ export default function AnalyzerApp() {
       return;
     }
     setEnriching(true);
+    setStatus({
+      kind: "info",
+      text: `Enriching ${urls.length} flagged profile${urls.length === 1 ? "" : "s"} via Apify — this can take a couple of minutes…`,
+      spinner: true,
+    });
     try {
       const res = await fetch("/api/enrich", {
         method: "POST",
