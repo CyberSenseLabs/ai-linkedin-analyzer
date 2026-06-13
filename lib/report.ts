@@ -10,18 +10,45 @@ const GREY = "#5f5e5a";
 // each element's computed fill/stroke, so it rasterises correctly off-DOM.
 async function svgToPng(svg: SVGSVGElement, scale = 2): Promise<{ dataUrl: string; w: number; h: number } | null> {
   try {
+    // Force a light-theme palette while reading colours so the image always
+    // renders for the white PDF background — black labels, a black "you" node
+    // (its white text stays legible), dark links — regardless of the user's OS
+    // theme (in dark mode --color-text-primary is near-white and would be
+    // invisible on white). Applied to the live element, read, then restored
+    // synchronously (before any repaint), so there's no on-screen flash.
+    const LIGHT: Record<string, string> = {
+      "--color-text-primary": "#000000",
+      "--color-background-primary": "#ffffff",
+      "--color-text-info": "#185fa5",
+      "--color-border-secondary": "rgba(0,0,0,0.35)",
+      "--color-text-secondary": "#5f5e5a",
+      "--color-text-tertiary": "#888780",
+    };
+    const prev: Record<string, string> = {};
+    for (const k in LIGHT) {
+      prev[k] = svg.style.getPropertyValue(k);
+      svg.style.setProperty(k, LIGHT[k]);
+    }
+
     const clone = svg.cloneNode(true) as SVGSVGElement;
-    const origEls = svg.querySelectorAll("*");
-    const cloneEls = clone.querySelectorAll("*");
-    origEls.forEach((o, i) => {
-      const cs = getComputedStyle(o);
-      const c = cloneEls[i] as SVGElement | undefined;
-      if (!c) return;
-      if (cs.fill) c.setAttribute("fill", cs.fill);
-      if (cs.stroke && cs.stroke !== "none") c.setAttribute("stroke", cs.stroke);
-      if (cs.strokeWidth) c.setAttribute("stroke-width", cs.strokeWidth);
-      if (cs.opacity && cs.opacity !== "1") c.setAttribute("opacity", cs.opacity);
-    });
+    try {
+      const origEls = svg.querySelectorAll("*");
+      const cloneEls = clone.querySelectorAll("*");
+      origEls.forEach((o, i) => {
+        const cs = getComputedStyle(o);
+        const c = cloneEls[i] as SVGElement | undefined;
+        if (!c) return;
+        if (cs.fill) c.setAttribute("fill", cs.fill);
+        if (cs.stroke && cs.stroke !== "none") c.setAttribute("stroke", cs.stroke);
+        if (cs.strokeWidth) c.setAttribute("stroke-width", cs.strokeWidth);
+        if (cs.opacity && cs.opacity !== "1") c.setAttribute("opacity", cs.opacity);
+      });
+    } finally {
+      for (const k in LIGHT) {
+        if (prev[k]) svg.style.setProperty(k, prev[k]);
+        else svg.style.removeProperty(k);
+      }
+    }
 
     const vb = svg.viewBox.baseVal;
     const w = vb && vb.width ? vb.width : svg.clientWidth || 680;
