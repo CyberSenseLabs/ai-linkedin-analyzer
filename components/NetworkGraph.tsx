@@ -91,6 +91,7 @@ export default function NetworkGraph({
       .attr("dy", (d) => (d.me ? 4 : -d.r - 4))
       .attr("font-size", (d) => (d.me ? 11 : 10))
       .attr("font-weight", 500)
+      .attr("font-family", "Arial, Helvetica, sans-serif")
       .attr("fill", (d) => (d.me ? "var(--color-background-primary)" : "var(--color-text-primary)"))
       .style("pointer-events", "none");
 
