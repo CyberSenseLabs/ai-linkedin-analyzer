@@ -257,6 +257,27 @@ export async function generateReport(
       columnStyles: { 0: { cellWidth: 64 }, 1: { cellWidth: 180 } },
       head: [["Score", "Connection", "Why flagged"]],
       body: flaggedRows,
+      didDrawCell: (hook) => {
+        // Underline the connection's name and link it to their LinkedIn profile.
+        if (hook.section !== "body" || hook.column.index !== 1) return;
+        const f = flagged[hook.row.index];
+        if (!f.u) return;
+        const { cell } = hook;
+        const padX = cell.padding("left");
+        const padY = cell.padding("top");
+        const fontSize = cell.styles.fontSize ?? 8.5;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(fontSize);
+        const name = clean(f.n || "(blank)");
+        const nameWidth = Math.min(doc.getTextWidth(name), cell.width - padX * 2);
+        const lineHeight = fontSize * 1.15;
+        const x = cell.x + padX;
+        const yTop = cell.y + padY;
+        doc.setDrawColor(BRAND);
+        doc.setLineWidth(0.5);
+        doc.line(x, yTop + lineHeight - 1.5, x + nameWidth, yTop + lineHeight - 1.5);
+        doc.link(x, yTop, nameWidth, lineHeight, { url: f.u });
+      },
     });
   } else {
     doc.setFont("helvetica", "normal");
