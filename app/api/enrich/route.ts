@@ -58,8 +58,21 @@ export async function POST(req: NextRequest) {
       },
     );
 
-    if (res.status === 401 || res.status === 403) {
-      return NextResponse.json({ error: "Apify rejected the token (unauthorised)." }, { status: 401 });
+    if (res.status === 401) {
+      const text = await res.text();
+      return NextResponse.json(
+        { error: `Apify rejected the token as invalid (401): ${text.slice(0, 300)}` },
+        { status: 401 },
+      );
+    }
+    if (res.status === 403) {
+      const text = await res.text();
+      return NextResponse.json(
+        {
+          error: `Apify denied access to the actor (403) — your token may be valid but lack access to "${ACTOR}". You may need to rent/add this actor on Apify Store first. Details: ${text.slice(0, 300)}`,
+        },
+        { status: 403 },
+      );
     }
     if (!res.ok) {
       const text = await res.text();
