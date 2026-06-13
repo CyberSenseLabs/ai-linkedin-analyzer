@@ -26,12 +26,10 @@ const H = 470;
 export default function NetworkGraph({
   people,
   activeSectors,
-  invitationOverlay,
   onSelectCompany,
 }: {
   people: PeopleByCompany;
   activeSectors: Set<string>;
-  invitationOverlay: boolean;
   onSelectCompany: (company: string, sector: string) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -200,20 +198,6 @@ export default function NetworkGraph({
     node.style("opacity", (d) => (d.me ? 1 : activeSectors.has(d.sector!) ? 1 : 0.08));
     link.style("opacity", (d) => (activeSectors.has((d.target as GraphNode).sector!) ? 0.5 : 0.04));
   }, [activeSectors]);
-
-  // Toggle the pending-invitation overlay highlight.
-  useEffect(() => {
-    const node = nodeSelRef.current;
-    if (!node) return;
-    if (invitationOverlay) {
-      node.select("circle").attr("stroke", "#BA7517").attr("stroke-width", (d) => (d.me ? 0 : 2.5));
-    } else {
-      node
-        .select("circle")
-        .attr("stroke", (d) => (d.me ? "var(--color-text-primary)" : "#fff"))
-        .attr("stroke-width", (d) => (d.me ? 0 : 1.2));
-    }
-  }, [invitationOverlay]);
 
   return (
     <div

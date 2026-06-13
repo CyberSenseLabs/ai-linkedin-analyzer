@@ -24,7 +24,6 @@ function safeHref(u: string): string | undefined {
 export default function AnalyzerApp() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [activeSectors, setActiveSectors] = useState<Set<string>>(new Set());
-  const [overlay, setOverlay] = useState(false);
   const [drill, setDrill] = useState<{ company: string; sector: string } | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
 
@@ -291,15 +290,9 @@ export default function AnalyzerApp() {
             ))}
           </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 10, cursor: "pointer" }}>
-            <input type="checkbox" checked={overlay} onChange={(e) => setOverlay(e.target.checked)} style={{ width: "auto" }} />
-            Overlay pending-invitation flow
-          </label>
-
           <NetworkGraph
             people={data.people}
             activeSectors={activeSectors}
-            invitationOverlay={overlay}
             onSelectCompany={onSelectCompany}
           />
 
