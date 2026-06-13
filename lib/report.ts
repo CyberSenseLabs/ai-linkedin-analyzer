@@ -283,59 +283,6 @@ export async function generateReport(
     },
   });
 
-  // --- Scoring rubric -------------------------------------------------------
-  doc.addPage();
-  y = margin + 16;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor("#1f1e1c");
-  doc.text("Scoring rubric", margin, y);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(GREY);
-  doc.text(
-    `Each connection earns points for signals associated with fake or low-quality profiles. A connection is flagged once its score reaches ${scan.min_score}.`,
-    margin,
-    y + 14,
-  );
-  y += 28;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor("#1f1e1c");
-  doc.text("Heuristic score (H) — from your export data", margin, y);
-  autoTable(doc, {
-    startY: y + 8,
-    margin: { left: margin, right: margin },
-    headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
-    styles: { fontSize: 9, cellPadding: 4 },
-    columnStyles: { 1: { halign: "right", cellWidth: 60 } },
-    head: [["Signal", "Points"]],
-    body: HEURISTIC_RUBRIC.map(([label, pts]) => [label, `+${pts}`]),
-  });
-  // @ts-expect-error lastAutoTable is attached by the plugin
-  y = doc.lastAutoTable.finalY + 20;
-
-  if (scan.enriched) {
-    if (y > pageH - 160) {
-      doc.addPage();
-      y = margin;
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor("#1f1e1c");
-    doc.text("Enrichment score (E) — from scraped profile (Apify)", margin, y);
-    autoTable(doc, {
-      startY: y + 8,
-      margin: { left: margin, right: margin },
-      headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
-      styles: { fontSize: 9, cellPadding: 4 },
-      columnStyles: { 1: { halign: "right", cellWidth: 60 } },
-      head: [["Signal", "Points"]],
-      body: ENRICHMENT_RUBRIC.map(([label, pts]) => [label, pts]),
-    });
-  }
-
   // --- Authenticity scan --------------------------------------------------
   doc.addPage();
   y = margin + 16;
@@ -395,6 +342,59 @@ export async function generateReport(
     doc.setFontSize(11);
     doc.setTextColor("#1f1e1c");
     doc.text("No connections met the suspicion threshold — your network looks authentic.", margin, y + 40);
+  }
+
+  // --- Appendix: scoring rubric --------------------------------------------
+  doc.addPage();
+  y = margin + 16;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Appendix: scoring rubric", margin, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(GREY);
+  doc.text(
+    `Each connection earns points for signals associated with fake or low-quality profiles. A connection is flagged once its score reaches ${scan.min_score}.`,
+    margin,
+    y + 14,
+  );
+  y += 28;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Heuristic score (H) — from your export data", margin, y);
+  autoTable(doc, {
+    startY: y + 8,
+    margin: { left: margin, right: margin },
+    headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+    styles: { fontSize: 9, cellPadding: 4 },
+    columnStyles: { 1: { halign: "right", cellWidth: 60 } },
+    head: [["Signal", "Points"]],
+    body: HEURISTIC_RUBRIC.map(([label, pts]) => [label, `+${pts}`]),
+  });
+  // @ts-expect-error lastAutoTable is attached by the plugin
+  y = doc.lastAutoTable.finalY + 20;
+
+  if (scan.enriched) {
+    if (y > pageH - 160) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor("#1f1e1c");
+    doc.text("Enrichment score (E) — from scraped profile (Apify)", margin, y);
+    autoTable(doc, {
+      startY: y + 8,
+      margin: { left: margin, right: margin },
+      headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+      styles: { fontSize: 9, cellPadding: 4 },
+      columnStyles: { 1: { halign: "right", cellWidth: 60 } },
+      head: [["Signal", "Points"]],
+      body: ENRICHMENT_RUBRIC.map(([label, pts]) => [label, pts]),
+    });
   }
 
   // --- Footer (page numbers) on every page --------------------------------
