@@ -236,9 +236,12 @@ export async function generateReport(
   y = doc.lastAutoTable.finalY + 20;
 
   // --- Top companies ------------------------------------------------------
-  const companyRows = Object.entries(people)
-    .map(([name, ppl]) => [clean(name), clean(COMPANY_SECTOR[name] || "Other"), String(ppl.length)])
-    .sort((a, b) => Number(b[2]) - Number(a[2]));
+  const companyEntries = Object.entries(people).sort((a, b) => b[1].length - a[1].length);
+  const companyRows = companyEntries.map(([name, ppl]) => [
+    clean(name),
+    clean(COMPANY_SECTOR[name] || "Other"),
+    String(ppl.length),
+  ]);
 
   if (y > pageH - 120) {
     doc.addPage();
@@ -256,6 +259,28 @@ export async function generateReport(
     columnStyles: { 2: { halign: "right", cellWidth: 80 } },
     head: [["Company", "Sector", "Connections"]],
     body: companyRows,
+    didDrawCell: (hook) => {
+      // Underline the company name and link it to a LinkedIn company search.
+      if (hook.section !== "body" || hook.column.index !== 0) return;
+      const [name] = companyEntries[hook.row.index];
+      const { cell } = hook;
+      const padX = cell.padding("left");
+      const padY = cell.padding("top");
+      const fontSize = cell.styles.fontSize ?? 9;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(fontSize);
+      const label = clean(name);
+      const textWidth = Math.min(doc.getTextWidth(label), cell.width - padX * 2);
+      const lineHeight = fontSize * 1.15;
+      const x = cell.x + padX;
+      const yTop = cell.y + padY;
+      doc.setDrawColor(BRAND);
+      doc.setLineWidth(0.5);
+      doc.line(x, yTop + lineHeight - 1.5, x + textWidth, yTop + lineHeight - 1.5);
+      doc.link(x, yTop, textWidth, lineHeight, {
+        url: `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(name)}`,
+      });
+    },
   });
 
   // --- Scoring rubric -------------------------------------------------------
