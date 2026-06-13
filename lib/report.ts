@@ -1,10 +1,43 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { COMPANY_SECTOR } from "./constants";
+import { COMPANY_SECTOR, HEURISTIC_WEIGHTS } from "./constants";
 import type { DashboardData, FlaggedConnection } from "./types";
 
 const BRAND = "#185FA5";
 const GREY = "#5f5e5a";
+
+// Plain-English description of each heuristic signal, in HEURISTIC_WEIGHTS order.
+const HEURISTIC_RUBRIC: [string, number][] = [
+  ["No company or job title listed", HEURISTIC_WEIGHTS.no_company_or_title],
+  ["No job title listed", HEURISTIC_WEIGHTS.no_title],
+  ["Scam/spam term in job title", HEURISTIC_WEIGHTS.scam_term_in_title],
+  ["Promotional text in name", HEURISTIC_WEIGHTS.promo_text_in_name],
+  ["Contact info or link in job title", HEURISTIC_WEIGHTS.contact_in_title],
+  ["Missing first or last name", HEURISTIC_WEIGHTS.missing_name_part],
+  ["Digits or symbols in name", HEURISTIC_WEIGHTS.symbols_in_name],
+  ["Emoji in name", HEURISTIC_WEIGHTS.emoji_in_name],
+  ["Implausibly short name", HEURISTIC_WEIGHTS.implausibly_short_name],
+  ["Name in ALL CAPS", HEURISTIC_WEIGHTS.all_caps_name],
+  ["Duplicate profile URL", HEURISTIC_WEIGHTS.duplicate_url],
+  ["Duplicate empty profile", HEURISTIC_WEIGHTS.duplicate_empty_profile],
+  ["No profile URL", HEURISTIC_WEIGHTS.no_url],
+];
+
+// Enrichment signals from a scraped profile (scripts/scoring.py enrichment_score).
+const ENRICHMENT_RUBRIC: [string, string][] = [
+  ["Very low connections (under 50)", "+3"],
+  ["Low connections (under 150)", "+1"],
+  ["Very few followers (under 50)", "+1"],
+  ["No profile photo", "+2"],
+  ["No experience, education or certifications", "+3"],
+  ["No experience or education listed", "+1"],
+  ["No headline", "+1"],
+  ["No about section or skills", "+1"],
+  ["LinkedIn Premium (trust signal)", "-1"],
+  ["Influencer badge (trust signal)", "-1"],
+  ["3+ certifications (trust signal)", "-1"],
+  ["500+ connections (trust signal)", "-1"],
+];
 
 // Render a live SVG (with CSS-variable colours) to a PNG data URL by resolving
 // each element's computed fill/stroke, so it rasterises correctly off-DOM.
@@ -224,6 +257,59 @@ export async function generateReport(
     head: [["Company", "Sector", "Connections"]],
     body: companyRows,
   });
+
+  // --- Scoring rubric -------------------------------------------------------
+  doc.addPage();
+  y = margin + 16;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Scoring rubric", margin, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(GREY);
+  doc.text(
+    `Each connection earns points for signals associated with fake or low-quality profiles. A connection is flagged once its score reaches ${scan.min_score}.`,
+    margin,
+    y + 14,
+  );
+  y += 28;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor("#1f1e1c");
+  doc.text("Heuristic score (H) — from your export data", margin, y);
+  autoTable(doc, {
+    startY: y + 8,
+    margin: { left: margin, right: margin },
+    headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+    styles: { fontSize: 9, cellPadding: 4 },
+    columnStyles: { 1: { halign: "right", cellWidth: 60 } },
+    head: [["Signal", "Points"]],
+    body: HEURISTIC_RUBRIC.map(([label, pts]) => [label, `+${pts}`]),
+  });
+  // @ts-expect-error lastAutoTable is attached by the plugin
+  y = doc.lastAutoTable.finalY + 20;
+
+  if (scan.enriched) {
+    if (y > pageH - 160) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor("#1f1e1c");
+    doc.text("Enrichment score (E) — from scraped profile (Apify)", margin, y);
+    autoTable(doc, {
+      startY: y + 8,
+      margin: { left: margin, right: margin },
+      headStyles: { fillColor: BRAND, textColor: "#ffffff", fontStyle: "bold" },
+      styles: { fontSize: 9, cellPadding: 4 },
+      columnStyles: { 1: { halign: "right", cellWidth: 60 } },
+      head: [["Signal", "Points"]],
+      body: ENRICHMENT_RUBRIC.map(([label, pts]) => [label, pts]),
+    });
+  }
 
   // --- Authenticity scan --------------------------------------------------
   doc.addPage();
