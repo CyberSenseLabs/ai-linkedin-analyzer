@@ -18,3 +18,12 @@ data/enrichment.json
 # Extracted per-company connection data (contains your real connections)
 data/company_people.json
 .vercel
+
+# Next.js / Node (SaaS app)
+node_modules/
+.next/
+out/
+next-env.d.ts
+.env.local
+.env*.local
+*.tsbuildinfo
