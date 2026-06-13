@@ -27,7 +27,6 @@ export default function AnalyzerApp() {
   const [overlay, setOverlay] = useState(false);
   const [drill, setDrill] = useState<{ company: string; sector: string } | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
-  const [scanOpen, setScanOpen] = useState(false);
 
   const [flagged, setFlagged] = useState<FlaggedConnection[]>([]);
   const [enriching, setEnriching] = useState(false);
@@ -65,7 +64,6 @@ export default function AnalyzerApp() {
       setData(built);
       setFlagged(built.flagged);
       setDrill(null);
-      setScanOpen(false);
       const present = new Set(Object.keys(built.people).map((c) => COMPANY_SECTOR[c] || "Other"));
       setActiveSectors(new Set(Object.keys(SECTORS).filter((s) => present.has(s))));
       setStatus({
@@ -97,7 +95,6 @@ export default function AnalyzerApp() {
     setData(null);
     setFlagged([]);
     setDrill(null);
-    setScanOpen(false);
     setStatus(null);
     setActiveSectors(new Set());
   };
@@ -319,19 +316,13 @@ export default function AnalyzerApp() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => setScanOpen(true)}>
-                  <i className="ti ti-shield-search" style={{ verticalAlign: -2, marginRight: 5 }} />
-                  Run authenticity scan
+                <button onClick={() => setKeyDialogOpen(true)} disabled={enriching}>
+                  {enriching ? <span className="spinner" style={{ verticalAlign: -2, marginRight: 5 }} /> : <i className="ti ti-sparkles" style={{ verticalAlign: -2, marginRight: 5 }} />}
+                  Enrich via Apify
                 </button>
-                {scanOpen && (
-                  <button onClick={() => setKeyDialogOpen(true)} disabled={enriching}>
-                    {enriching ? <span className="spinner" style={{ verticalAlign: -2, marginRight: 5 }} /> : <i className="ti ti-sparkles" style={{ verticalAlign: -2, marginRight: 5 }} />}
-                    Enrich via Apify
-                  </button>
-                )}
               </div>
             </div>
-            {scanOpen && <ScanResults flagged={flagged} scan={data.scan} />}
+            <ScanResults flagged={flagged} scan={data.scan} />
           </div>
         </>
       )}
