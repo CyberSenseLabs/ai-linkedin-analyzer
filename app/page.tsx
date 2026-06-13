@@ -62,7 +62,7 @@ export default function LandingPage() {
           <h1 style={{ fontSize: 40, lineHeight: 1.15, margin: "0 0 1rem" }}>
             See your LinkedIn network
             <br />
-            the way an analyst would.
+            the way a security analyst would.
           </h1>
           <p
             style={{
@@ -133,6 +133,8 @@ export default function LandingPage() {
         }}
       >
         AI LinkedIn Analyzer · Your data never leaves your browser.
+        <br />
+        © 2026 Cyber Sense
       </footer>
     </div>
   );
