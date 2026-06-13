@@ -137,10 +137,15 @@ export default function AnalyzerApp() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
       const items: ScrapedProfile[] = json.items || [];
+      if (items.length) {
+        // eslint-disable-next-line no-console
+        console.log("[enrich] sample item from Apify:", items[0]);
+      }
       const bySlug = new Map<string, ScrapedProfile>();
       items.forEach((p) => {
-        const url = (p.linkedinUrl || p.url || "") as string;
-        const slug = p.publicIdentifier ? String(p.publicIdentifier).toLowerCase() : profileSlug(url);
+        const url = (p.linkedinUrl || p.url || p.profileUrl || (p.input as { url?: string } | undefined)?.url || "") as string;
+        const ident = p.publicIdentifier || (p.input as { publicIdentifier?: string } | undefined)?.publicIdentifier;
+        const slug = ident ? String(ident).toLowerCase() : profileSlug(url);
         if (slug) bySlug.set(slug, p);
       });
       let enrichedCount = 0;
@@ -154,7 +159,14 @@ export default function AnalyzerApp() {
       next.sort((a, b) => (b.esc ?? b.sc) - (a.esc ?? a.sc) || b.sc - a.sc);
       setFlagged(next);
       setData({ ...data, scan: { ...data.scan, enriched: enrichedCount } });
-      setStatus({ kind: "success", text: `Enriched ${enrichedCount} of ${urls.length} flagged profiles via Apify.` });
+      if (enrichedCount === 0 && items.length > 0) {
+        setStatus({
+          kind: "error",
+          text: `Apify returned ${items.length} profile(s) but none matched your flagged connections — check the browser console for a sample item to debug the field names.`,
+        });
+      } else {
+        setStatus({ kind: "success", text: `Enriched ${enrichedCount} of ${urls.length} flagged profiles via Apify.` });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setStatus({ kind: "error", text: `Enrichment failed: ${message}` });
