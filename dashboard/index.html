@@ -288,7 +288,7 @@ function drill(name,sector,PEOPLE){
 function badge(score, enriched){
   const strong = (enriched!=null && enriched>=4) || score>=6;
   const bg = strong ? '#A32D2D' : (score>=4 ? '#854F0B' : '#5F5E5A');
-  const label = enriched!=null ? 'E'+enriched+' / H'+score : score;
+  const label = enriched!=null ? 'E'+enriched+' / H'+score : 'H'+score;
   return '<span style="background:'+bg+';color:#fff;font-size:11px;font-weight:500;padding:2px 7px;border-radius:10px;white-space:nowrap;">'+label+'</span>';
 }
 
