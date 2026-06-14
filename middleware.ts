@@ -1,40 +1,14 @@
-import { createRequire } from "node:module";
-import type { clerkMiddleware as ClerkMiddleware, createRouteMatcher as CreateRouteMatcher } from "@clerk/nextjs/server";
-import type { NextRequest as NextRequestType, NextFetchEvent } from "next/server";
-
-// Vercel's Node.js middleware runtime executes this file's source directly and
-// resolves these packages at runtime (it does NOT use Next's bundled middleware
-// output). Its ESM loader picks a build whose named exports it can't statically
-// detect, throwing "does not provide an export named 'clerkMiddleware'".
-// Resolving via createRequire forces CJS resolution, which exposes the exports
-// reliably and tolerates Clerk's extensionless dist imports. Types are imported
-// separately (erased at build time).
-const require = createRequire(import.meta.url);
-const { clerkMiddleware, createRouteMatcher } = require("@clerk/nextjs/server") as {
-  clerkMiddleware: typeof ClerkMiddleware;
-  createRouteMatcher: typeof CreateRouteMatcher;
-};
-const { NextRequest } = require("next/server") as {
-  NextRequest: new (input: Request | string, init?: RequestInit) => NextRequestType;
-};
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Everything under /dashboard and the enrichment API requires a signed-in user.
 // The landing page, sign-in and sign-up routes stay public.
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api/enrich(.*)"]);
 
-const handler = clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {
     await auth.protect();
   }
 });
-
-// Vercel invokes this as a generic Web Handler, passing a plain `Request` that
-// has no `nextUrl`. Clerk (and our route matcher) need a `NextRequest`, so
-// normalise the incoming request before handing it to Clerk's middleware.
-export default function middleware(request: Request, event: NextFetchEvent) {
-  const req = request instanceof NextRequest ? request : new NextRequest(request);
-  return handler(req, event);
-}
 
 export const config = {
   // Clerk's middleware relies on Node.js APIs (crypto, etc.) that aren't
