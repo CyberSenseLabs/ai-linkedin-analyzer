@@ -4,7 +4,9 @@ Turns a LinkedIn data export into an interactive network dashboard — a force-d
 map of your connections clustered by company and coloured by industry sector, with
 drill-down into the individuals at each organisation.
 
-![dashboard](docs/screenshot.png)
+<p align="center">
+  <img src="docs/screenshot.png" alt="Network dashboard — a force-directed graph of LinkedIn connections clustered by company and coloured by sector" width="720">
+</p>
 
 ## Features
 
