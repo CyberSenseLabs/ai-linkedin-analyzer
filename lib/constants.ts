@@ -47,6 +47,40 @@ export const COMPANY_SECTOR: Record<string, string> = {
   "La Trobe University": "Education",
   "RMIT University": "Education",
   "Uni of Melbourne": "Education",
+  // Banking & finance
+  Westpac: "Banking & finance",
+  "Macquarie Group": "Banking & finance",
+  Suncorp: "Banking & finance",
+  "Bendigo Bank": "Banking & finance",
+  "JPMorgan Chase": "Banking & finance",
+  "Goldman Sachs": "Banking & finance",
+  Visa: "Banking & finance",
+  Stripe: "Banking & finance",
+  // Security & consulting
+  Deloitte: "Security & consulting",
+  PwC: "Security & consulting",
+  KPMG: "Security & consulting",
+  EY: "Security & consulting",
+  "McKinsey & Company": "Security & consulting",
+  "Boston Consulting Group": "Security & consulting",
+  Mandiant: "Security & consulting",
+  // Education
+  "University of Melbourne": "Education",
+  "Monash University": "Education",
+  "University of Sydney": "Education",
+  UNSW: "Education",
+  "TAFE NSW": "Education",
+  "Deakin University": "Education",
+  // Telco & infrastructure
+  "nbn Australia": "Telco & infrastructure",
+  Aurizon: "Telco & infrastructure",
+  "Australian Rail Track Corp": "Telco & infrastructure",
+  // Utilities
+  "AGL Energy": "Utilities",
+  "Origin Energy": "Utilities",
+  "Sydney Water": "Utilities",
+  Transgrid: "Utilities",
+  Ausgrid: "Utilities",
 };
 
 export const ROLECOL: Record<string, string> = {
