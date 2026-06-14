@@ -3,7 +3,135 @@
 // barely-there lock/shield glyphs. Deliberately low-contrast so it never
 // competes with foreground content. Purely decorative — aria-hidden, no pointer
 // events, sits behind everything.
+//
+// Animation is CSS-only (opacity / r / transform / stroke-dashoffset, all GPU- or
+// compositor-friendly) and is fully disabled under prefers-reduced-motion.
+
+// Constellation graph data: links [x1, y1, x2, y2], then nodes [x, y, r].
+const LINKS: [number, number, number, number][] = [
+  [120, 160, 260, 240],
+  [260, 240, 180, 380],
+  [260, 240, 420, 180],
+  [180, 380, 320, 470],
+  [1280, 180, 1160, 300],
+  [1160, 300, 1300, 420],
+  [1160, 300, 1040, 200],
+  [1300, 420, 1220, 560],
+  [200, 720, 360, 660],
+  [360, 660, 300, 800],
+  [1120, 700, 1240, 760],
+];
+
+const NODES: [number, number, number][] = [
+  [120, 160, 3], [260, 240, 5], [180, 380, 4], [420, 180, 3], [320, 470, 4],
+  [1280, 180, 4], [1160, 300, 5], [1300, 420, 4], [1040, 200, 3], [1220, 560, 4],
+  [200, 720, 4], [360, 660, 5], [300, 800, 3], [1120, 700, 4], [1240, 760, 3],
+];
+
+const CSS = `
+@keyframes cb-twinkle {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+@keyframes cb-pulse {
+  0%   { opacity: 0.2; }
+  50%  { opacity: 0.85; }
+  100% { opacity: 0.2; }
+}
+@keyframes cb-flow {
+  to { stroke-dashoffset: -220; }
+}
+@keyframes cb-drift {
+  0%   { transform: translate(0px, 0px); }
+  50%  { transform: translate(14px, -10px); }
+  100% { transform: translate(0px, 0px); }
+}
+@keyframes cb-drift2 {
+  0%   { transform: translate(0px, 0px); }
+  50%  { transform: translate(-12px, 8px); }
+  100% { transform: translate(0px, 0px); }
+}
+@keyframes cb-breathe {
+  0%, 100% { opacity: 0.04; }
+  50%      { opacity: 0.09; }
+}
+@keyframes cb-flicker {
+  0%, 100%   { opacity: 0.02; }
+  45%        { opacity: 0.06; }
+  55%        { opacity: 0.03; }
+  70%        { opacity: 0.07; }
+}
+
+.cb-cluster-a { animation: cb-drift 26s ease-in-out infinite; }
+.cb-cluster-b { animation: cb-drift2 32s ease-in-out infinite; }
+.cb-node { animation: cb-twinkle 4s ease-in-out infinite; }
+.cb-link-static { opacity: 0.5; }
+.cb-link-flow {
+  stroke-dasharray: 5 215;
+  animation: cb-flow 3.2s linear infinite, cb-pulse 3.2s ease-in-out infinite;
+}
+.cb-glyph { animation: cb-breathe 7s ease-in-out infinite; }
+.cb-bits { animation: cb-flicker 6s steps(1, end) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-cluster-a, .cb-cluster-b, .cb-node, .cb-link-flow, .cb-glyph, .cb-bits {
+    animation: none;
+  }
+  .cb-link-flow { stroke-dasharray: none; opacity: 0.6; }
+  .cb-glyph { opacity: 0.05; }
+  .cb-bits { opacity: 0.045; }
+}
+`;
+
 export default function CyberBackground() {
+  // Split the constellation into two clusters so each can drift independently
+  // for a subtle parallax feel.
+  const leftLinks = LINKS.filter(([x1]) => x1 < 720);
+  const rightLinks = LINKS.filter(([x1]) => x1 >= 720);
+  const leftNodes = NODES.filter(([x]) => x < 720);
+  const rightNodes = NODES.filter(([x]) => x >= 720);
+
+  const renderCluster = (
+    links: typeof LINKS,
+    nodes: typeof NODES,
+    className: string,
+    seed: number,
+  ) => (
+    <g className={className}>
+      <g strokeWidth="0.8" fill="none">
+        {links.map(([x1, y1, x2, y2], i) => (
+          <g key={i}>
+            {/* faint always-on wire */}
+            <line className="cb-link-static" x1={x1} y1={y1} x2={x2} y2={y2} />
+            {/* travelling data pulse along the same wire */}
+            <line
+              className="cb-link-flow"
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              style={{ animationDelay: `${((i + seed) % 6) * 0.5}s` }}
+            />
+          </g>
+        ))}
+      </g>
+      {nodes.map(([cx, cy, r], i) => (
+        <circle
+          key={i}
+          className="cb-node"
+          cx={cx}
+          cy={cy}
+          r={r}
+          stroke="none"
+          style={{
+            animationDelay: `${((i * 7 + seed) % 40) / 10}s`,
+            animationDuration: `${3.5 + (i % 5) * 0.6}s`,
+          }}
+        />
+      ))}
+    </g>
+  );
+
   return (
     <div
       aria-hidden="true"
@@ -16,6 +144,7 @@ export default function CyberBackground() {
         color: "var(--color-text-info)",
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <svg
         width="100%"
         height="100%"
@@ -49,32 +178,14 @@ export default function CyberBackground() {
           <rect width="1440" height="900" fill="url(#hex)" />
         </g>
 
-        {/* Network constellation — nodes + links */}
+        {/* Network constellation — two drifting clusters of nodes + links */}
         <g opacity="0.10" stroke="currentColor" fill="currentColor">
-          <g strokeWidth="0.8">
-            <line x1="120" y1="160" x2="260" y2="240" />
-            <line x1="260" y1="240" x2="180" y2="380" />
-            <line x1="260" y1="240" x2="420" y2="180" />
-            <line x1="180" y1="380" x2="320" y2="470" />
-            <line x1="1280" y1="180" x2="1160" y2="300" />
-            <line x1="1160" y1="300" x2="1300" y2="420" />
-            <line x1="1160" y1="300" x2="1040" y2="200" />
-            <line x1="1300" y1="420" x2="1220" y2="560" />
-            <line x1="200" y1="720" x2="360" y2="660" />
-            <line x1="360" y1="660" x2="300" y2="800" />
-            <line x1="1120" y1="700" x2="1240" y2="760" />
-          </g>
-          {[
-            [120, 160, 3], [260, 240, 5], [180, 380, 4], [420, 180, 3], [320, 470, 4],
-            [1280, 180, 4], [1160, 300, 5], [1300, 420, 4], [1040, 200, 3], [1220, 560, 4],
-            [200, 720, 4], [360, 660, 5], [300, 800, 3], [1120, 700, 4], [1240, 760, 3],
-          ].map(([cx, cy, r], i) => (
-            <circle key={i} cx={cx} cy={cy} r={r} />
-          ))}
+          {renderCluster(leftLinks, leftNodes, "cb-cluster-a", 0)}
+          {renderCluster(rightLinks, rightNodes, "cb-cluster-b", 3)}
         </g>
 
-        {/* Faint shield + padlock glyphs */}
-        <g opacity="0.05" stroke="currentColor" fill="none" strokeWidth="2">
+        {/* Faint shield + padlock glyphs, gently breathing */}
+        <g className="cb-glyph" stroke="currentColor" fill="none" strokeWidth="2">
           {/* shield */}
           <path d="M620 760 L620 700 Q660 684 700 700 L700 760 Q700 812 660 832 Q620 812 620 760 Z" />
           <path d="M644 752 L656 766 L682 728" strokeWidth="2.5" />
@@ -84,8 +195,8 @@ export default function CyberBackground() {
           <circle cx="1032" cy="142" r="5" fill="currentColor" stroke="none" />
         </g>
 
-        {/* A couple of binary streams for texture */}
-        <g opacity="0.045" fill="currentColor" fontFamily="monospace" fontSize="13" letterSpacing="3">
+        {/* A couple of binary streams for texture, faintly flickering */}
+        <g className="cb-bits" fill="currentColor" fontFamily="monospace" fontSize="13" letterSpacing="3">
           <text x="60" y="540">01001100 01001001</text>
           <text x="1140" y="500">10110010 01000101</text>
           <text x="500" y="120">0100 1110</text>
