@@ -1,4 +1,18 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { createRequire } from "node:module";
+import type { clerkMiddleware as ClerkMiddleware, createRouteMatcher as CreateRouteMatcher } from "@clerk/nextjs/server";
+
+// Vercel's Node.js middleware runtime executes this file's source directly and
+// resolves `@clerk/nextjs/server` at runtime (it does NOT use Next's bundled
+// middleware output). Its ESM loader picks a build whose `clerkMiddleware`
+// export it can't statically detect, throwing "does not provide an export
+// named 'clerkMiddleware'". Resolving via createRequire forces CJS resolution,
+// which exposes the exports reliably and tolerates Clerk's extensionless dist
+// imports. Types are imported separately (erased at build time).
+const require = createRequire(import.meta.url);
+const { clerkMiddleware, createRouteMatcher } = require("@clerk/nextjs/server") as {
+  clerkMiddleware: typeof ClerkMiddleware;
+  createRouteMatcher: typeof CreateRouteMatcher;
+};
 
 // Everything under /dashboard and the enrichment API requires a signed-in user.
 // The landing page, sign-in and sign-up routes stay public.
