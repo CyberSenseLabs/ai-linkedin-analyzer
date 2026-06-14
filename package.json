@@ -2,13 +2,11 @@
   "name": "ai-linkedin-analyzer-saas",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "postinstall": "node scripts/patch-clerk-esm.js"
+    "lint": "next lint"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.5",
