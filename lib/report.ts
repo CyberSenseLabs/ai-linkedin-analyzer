@@ -309,21 +309,12 @@ export async function generateReport(
 
   if (flagged.length) {
     const flaggedRows = flagged.map((f) => {
-      const score = f.esc != null ? `H${f.sc} / E${f.esc}` : `H${f.sc}`;
-      // Colour the score cell to match the dashboard badge.
-      const scoreCell = {
-        content: score,
-        styles: {
-          fillColor: badgeColor(f.sc, f.esc),
-          textColor: "#ffffff",
-          fontStyle: "bold" as const,
-          halign: "center" as const,
-        },
-      };
+      // The score is rendered as a coloured pill in didDrawCell (below), so the
+      // cell content itself is left blank — its fixed width is set in columnStyles.
       const who = clean(`${f.n || "(blank)"}\n${(f.t || "no title") + (f.co ? ` @ ${f.co}` : "")}`);
       const reasons = (f.ers && f.ers.length ? f.ers : f.rs).join("; ");
       const trust = f.trust && f.trust.length ? `\nTrust: ${f.trust.join(", ")}` : "";
-      return [scoreCell, who, clean(reasons + trust)];
+      return ["", who, clean(reasons + trust)];
     });
     autoTable(doc, {
       startY: y + 26,
@@ -334,8 +325,34 @@ export async function generateReport(
       head: [["Score", "Connection", "Why flagged"]],
       body: flaggedRows,
       didDrawCell: (hook) => {
+        if (hook.section !== "body") return;
+
+        // Score column: draw a rounded pill (matching the dashboard badge)
+        // sized to the text, rather than filling the whole cell.
+        if (hook.column.index === 0) {
+          const f = flagged[hook.row.index];
+          const text = f.esc != null ? `H${f.sc} / E${f.esc}` : `H${f.sc}`;
+          const { cell } = hook;
+          const fs = 8.5;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(fs);
+          const padX = 5, padY = 2.6;
+          const pillH = fs + padY * 2;
+          const pillW = Math.min(doc.getTextWidth(text) + padX * 2, cell.width - 4);
+          const x = cell.x + (cell.width - pillW) / 2;
+          const yTop = cell.y + cell.padding("top");
+          doc.setFillColor(badgeColor(f.sc, f.esc));
+          doc.roundedRect(x, yTop, pillW, pillH, pillH / 2, pillH / 2, "F");
+          doc.setTextColor("#ffffff");
+          doc.text(text, cell.x + cell.width / 2, yTop + pillH / 2, {
+            align: "center",
+            baseline: "middle",
+          });
+          return;
+        }
+
         // Underline the connection's name and link it to their LinkedIn profile.
-        if (hook.section !== "body" || hook.column.index !== 1) return;
+        if (hook.column.index !== 1) return;
         const f = flagged[hook.row.index];
         if (!f.u) return;
         const { cell } = hook;
