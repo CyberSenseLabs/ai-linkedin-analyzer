@@ -27,3 +27,6 @@ next-env.d.ts
 .env.local
 .env*.local
 *.tsbuildinfo
+
+# Allow the synthetic test export (real exports stay ignored via *.zip above)
+!sample_data/synthetic_linkedin_export.zip
