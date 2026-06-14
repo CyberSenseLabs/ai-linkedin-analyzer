@@ -459,11 +459,17 @@ for (let i = 1; i <= pages; i++) {
   doc.text(`Page ${i} of ${pages}`, pageW - margin, pageH - 20, { align: "right" });
 }
 
-const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "sample_data");
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const outDir = join(projectRoot, "sample_data");
 mkdirSync(outDir, { recursive: true });
+const pdfBuf = Buffer.from(doc.output("arraybuffer"));
 const outPath = join(outDir, "synthetic_network_report.pdf");
-writeFileSync(outPath, Buffer.from(doc.output("arraybuffer")));
-console.log(`Wrote ${outPath}`);
+writeFileSync(outPath, pdfBuf);
+// Mirror into public/ so the landing page can link to it (sample_data isn't served).
+const publicDir = join(projectRoot, "public");
+mkdirSync(publicDir, { recursive: true });
+writeFileSync(join(publicDir, "synthetic_network_report.pdf"), pdfBuf);
+console.log(`Wrote ${outPath} (and public/synthetic_network_report.pdf)`);
 console.log(`  ${scan.total} connections · ${companyCount} companies · ${scan.flagged} flagged · ${scan.redacted} privacy-redacted · ${scan.enriched} enriched (simulated)`);
 
 // ---- export the same dataset as a LinkedIn-style Connections.csv zip -------

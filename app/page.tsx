@@ -95,6 +95,17 @@ export default function LandingPage() {
               </Link>
             </SignedIn>
           </div>
+          <p style={{ marginTop: "1.25rem", fontSize: 14 }}>
+            <a
+              href="/synthetic_network_report.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--color-text-info)", textDecoration: "none" }}
+            >
+              <i className="ti ti-file-type-pdf" style={{ verticalAlign: -2, marginRight: 5 }} />
+              View a sample report (PDF)
+            </a>
+          </p>
         </section>
 
         <section
