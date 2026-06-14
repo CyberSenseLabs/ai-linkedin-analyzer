@@ -20,8 +20,9 @@ const { jsPDF } = require("jspdf");
 const autoTable = require("jspdf-autotable").default;
 const JSZip = require("jszip");
 
-// ---- deterministic RNG so the report is reproducible -----------------------
-let seed = 7;
+// ---- RNG: random each run, or pass a seed as argv[2] to reproduce ----------
+let seed = Number(process.argv[2]) || (Date.now() % 2147483647);
+console.log(`seed = ${seed}  (pass it as an argument to reproduce this dataset)`);
 const rnd = () => {
   seed = (seed * 1103515245 + 12345) & 0x7fffffff;
   return seed / 0x7fffffff;
