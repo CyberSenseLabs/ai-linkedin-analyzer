@@ -6,6 +6,14 @@ import type { DashboardData, FlaggedConnection } from "./types";
 const BRAND = "#185FA5";
 const GREY = "#5f5e5a";
 
+// Badge background, mirroring the dashboard's <Badge> exactly so the report's
+// score chips match what the user sees on screen. `sc` = heuristic score,
+// `esc` = enrichment score (null when the profile wasn't enriched).
+function badgeColor(sc: number, esc: number | null): string {
+  const strong = (esc != null && esc >= 4) || sc >= 6;
+  return strong ? "#A32D2D" : sc >= 4 ? "#854F0B" : "#5F5E5A";
+}
+
 // Plain-English description of each heuristic signal, in HEURISTIC_WEIGHTS order.
 const HEURISTIC_RUBRIC: [string, number][] = [
   ["No company or job title listed", HEURISTIC_WEIGHTS.no_company_or_title],
@@ -301,11 +309,21 @@ export async function generateReport(
 
   if (flagged.length) {
     const flaggedRows = flagged.map((f) => {
-      const score = f.esc != null ? `E${f.esc} / H${f.sc}` : `H${f.sc}`;
+      const score = f.esc != null ? `H${f.sc} / E${f.esc}` : `H${f.sc}`;
+      // Colour the score cell to match the dashboard badge.
+      const scoreCell = {
+        content: score,
+        styles: {
+          fillColor: badgeColor(f.sc, f.esc),
+          textColor: "#ffffff",
+          fontStyle: "bold" as const,
+          halign: "center" as const,
+        },
+      };
       const who = clean(`${f.n || "(blank)"}\n${(f.t || "no title") + (f.co ? ` @ ${f.co}` : "")}`);
       const reasons = (f.ers && f.ers.length ? f.ers : f.rs).join("; ");
       const trust = f.trust && f.trust.length ? `\nTrust: ${f.trust.join(", ")}` : "";
-      return [score, who, clean(reasons + trust)];
+      return [scoreCell, who, clean(reasons + trust)];
     });
     autoTable(doc, {
       startY: y + 26,
