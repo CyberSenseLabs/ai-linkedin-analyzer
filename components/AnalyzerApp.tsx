@@ -443,7 +443,7 @@ function DrillPanel({
 function Badge({ score, enriched }: { score: number; enriched: number | null }) {
   const strong = (enriched != null && enriched >= 4) || score >= 6;
   const bg = strong ? "#A32D2D" : score >= 4 ? "#854F0B" : "#5F5E5A";
-  const label = enriched != null ? `E${enriched} / H${score}` : `H${score}`;
+  const label = enriched != null ? `H${score} / E${enriched}` : `H${score}`;
   return (
     <span style={{ background: bg, color: "#fff", fontSize: 11, fontWeight: 500, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap" }}>
       {label}
