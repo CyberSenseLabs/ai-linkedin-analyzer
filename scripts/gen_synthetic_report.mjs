@@ -252,12 +252,16 @@ y = lastY() + 24;
 // --- Network map (radial: YOU at the centre, top companies clustered by ----
 // sector, node size by connection count) — drawn as jsPDF vectors.
 {
-  const top = Object.entries(people)
-    .map(([co, ppl]) => ({ co, count: ppl.length, sec: sectorOf(co) }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 22)
-    // group same-sector nodes together so they cluster
-    .sort((a, b) => SECTOR_ORDER.indexOf(a.sec) - SECTOR_ORDER.indexOf(b.sec) || b.count - a.count);
+  // Show the top companies *per sector* (not top-N overall) so every sector is
+  // fairly represented on the map, grouped together so each sector clusters.
+  const PER_SECTOR = 7;
+  const bySector = {};
+  Object.entries(people).forEach(([co, ppl]) => {
+    const s = sectorOf(co);
+    (bySector[s] ||= []).push({ co, count: ppl.length, sec: s });
+  });
+  const top = SECTOR_ORDER.flatMap((s) =>
+    (bySector[s] || []).sort((a, b) => b.count - a.count).slice(0, PER_SECTOR));
 
   doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor("#1f1e1c");
   doc.text("Network map", margin, y);
