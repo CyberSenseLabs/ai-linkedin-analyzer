@@ -39,7 +39,13 @@ export default function LandingPage() {
           <i className="ti ti-brand-linkedin" style={{ color: "var(--color-text-info)", fontSize: 22 }} />
           AI LinkedIn Analyzer
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <Link
+            href="/about"
+            style={{ fontSize: 14, color: "var(--color-text-secondary)", textDecoration: "none" }}
+          >
+            About
+          </Link>
           <SignedOut>
             <Link href="/sign-in">
               <button>Log in</button>
