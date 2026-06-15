@@ -267,13 +267,13 @@ y = lastY() + 24;
   const mapH = 360;
   const cx = margin + mapW / 2;
   const cy = mapTop + mapH / 2;
-  const ring = 145;
+  const ring = 122;
   const N = top.length;
   const maxN = top[0].count, minN = top[N - 1].count;
 
   const nodes = top.map((t, i) => {
     const ang = -Math.PI / 2 + (i / N) * Math.PI * 2;
-    const rr = ring + (i % 2 ? 24 : -10); // stagger to reduce overlap
+    const rr = ring + (i % 2 ? 16 : -8); // stagger to reduce overlap
     return { ...t, ang, x: cx + Math.cos(ang) * rr, y: cy + Math.sin(ang) * rr };
   });
 
@@ -283,7 +283,7 @@ y = lastY() + 24;
 
   // company nodes
   nodes.forEach((p) => {
-    const r = 6 + (maxN === minN ? 0 : (p.count - minN) / (maxN - minN)) * 15;
+    const r = 6 + (maxN === minN ? 0 : (p.count - minN) / (maxN - minN)) * 12;
     doc.setFillColor(SECTOR_COLOR[p.sec] || "#888780");
     doc.circle(p.x, p.y, r, "F");
     doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor("#3a3a38");
@@ -297,9 +297,9 @@ y = lastY() + 24;
   doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor("#ffffff");
   doc.text("YOU", cx, cy, { align: "center", baseline: "middle" });
 
-  // sector legend
+  // sector legend (kept clear of the constellation)
   let lx = margin;
-  const ly = mapTop + mapH + 4;
+  const ly = mapTop + mapH + 18;
   doc.setFont("helvetica", "normal"); doc.setFontSize(8);
   SECTOR_ORDER.forEach((sec) => {
     doc.setFillColor(SECTOR_COLOR[sec]); doc.circle(lx + 3, ly - 2.5, 3, "F");
@@ -307,7 +307,7 @@ y = lastY() + 24;
     lx += doc.getTextWidth(sec) + 28;
   });
 
-  y = mapTop + mapH + 26;
+  y = mapTop + mapH + 40;
 }
 
 // Connections by sector
